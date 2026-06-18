@@ -21,11 +21,13 @@ focused region comparison evidence: route timeline, registry rows, OCR upload pa
 - Adjusted workspace grid and registry density.
 - Fixed route-step label wrapping on desktop.
 - Verified OCR interaction, save action, and Excel export response.
+- Added the employee self-service submission screen and verified navigation, OCR-to-data step transition, submission success state, `/api/submissions`, and mobile stacking.
 
 **Implementation Checklist**
 - Build completed with `npm run build`.
 - Local app returned HTTP 200 at `http://127.0.0.1:3000`.
 - `/api/documents`, `/api/documents/next-number`, `/api/ocr`, and `/api/export` are present.
+- `/api/submissions` is present for employee registration requests.
 - Excel export returned HTTP 200 with XLSX content type.
 - Desktop and mobile screenshots captured.
 

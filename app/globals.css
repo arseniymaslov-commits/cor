@@ -884,6 +884,344 @@ progress::-webkit-progress-value {
   color: #687382;
 }
 
+.self-service {
+  display: grid;
+  grid-template-columns: minmax(620px, 1fr) 360px;
+  min-height: calc(100vh - 76px);
+  background: #fff;
+}
+
+.self-main {
+  min-width: 0;
+  border-right: 1px solid var(--line);
+}
+
+.self-header {
+  min-height: 106px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px;
+  border-bottom: 1px solid var(--line);
+}
+
+.self-header h2 {
+  margin: 0;
+  font-size: 24px;
+  line-height: 1.2;
+}
+
+.self-header p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.request-badge {
+  min-width: 220px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 12px 14px;
+  background: #fbfbfc;
+}
+
+.request-badge span,
+.request-badge strong {
+  display: block;
+}
+
+.request-badge span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.request-badge strong {
+  margin-top: 4px;
+  font-size: 16px;
+}
+
+.direction-switch {
+  display: inline-flex;
+  gap: 4px;
+  margin: 20px 24px 0;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f6f7f9;
+}
+
+.direction-switch button {
+  min-height: 36px;
+  border: 0;
+  border-radius: 6px;
+  padding: 0 16px;
+  color: #4f5966;
+  background: transparent;
+  font-weight: 650;
+}
+
+.direction-switch button.active {
+  color: #fff;
+  background: var(--red);
+}
+
+.self-steps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1px;
+  margin: 20px 24px 0;
+  background: var(--line);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.self-steps button {
+  min-height: 54px;
+  border: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: #5d6672;
+  background: #fff;
+  font-weight: 700;
+}
+
+.self-steps span {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: #5d6672;
+  background: #eef1f5;
+  font-size: 12px;
+}
+
+.self-steps button.active {
+  color: var(--red);
+  background: #fff8f8;
+}
+
+.self-steps button.active span,
+.self-steps button.done span {
+  color: #fff;
+  background: var(--red);
+}
+
+.self-content {
+  padding: 22px 24px;
+}
+
+.self-upload-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) 300px;
+  gap: 18px;
+  align-items: stretch;
+}
+
+.self-upload {
+  margin: 0;
+  min-height: 265px;
+}
+
+.self-note,
+.result-panel,
+.self-ocr-summary,
+.self-status-card {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.self-note {
+  padding: 18px;
+  display: grid;
+  align-content: center;
+  gap: 12px;
+}
+
+.self-note h3,
+.result-panel h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.self-note p,
+.result-panel p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.self-form {
+  max-width: 790px;
+  display: grid;
+  gap: 14px;
+}
+
+.self-ocr-summary {
+  padding: 13px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  background: #f7fbf8;
+}
+
+.self-ocr-summary strong {
+  color: var(--green);
+}
+
+.self-ocr-summary span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.self-review {
+  max-width: 790px;
+  display: grid;
+  gap: 16px;
+}
+
+.result-panel {
+  padding: 18px;
+  display: grid;
+  grid-template-columns: 42px 1fr;
+  gap: 12px;
+  align-items: center;
+}
+
+.result-panel svg {
+  color: var(--red);
+}
+
+.result-panel.sent {
+  border-color: #bfe9ce;
+  background: #f3fbf6;
+}
+
+.result-panel.sent svg {
+  color: var(--green);
+}
+
+.review-list {
+  border-top: 1px solid var(--line);
+}
+
+.review-list div {
+  min-height: 48px;
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.review-list span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.review-list strong {
+  font-size: 14px;
+}
+
+.self-actions {
+  min-height: 76px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 0 24px;
+}
+
+.self-side {
+  min-width: 0;
+  background: #fbfbfc;
+}
+
+.self-side .section-heading {
+  background: #fff;
+}
+
+.self-status-card {
+  margin: 18px;
+  padding: 14px;
+}
+
+.self-status-card.current {
+  border-color: #ffd5d9;
+  background: #fff8f8;
+}
+
+.self-status-card span,
+.self-status-card strong,
+.self-status-card small {
+  display: block;
+}
+
+.self-status-card span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.self-status-card strong {
+  margin-top: 5px;
+  font-size: 15px;
+}
+
+.self-status-card small {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.request-timeline {
+  margin: 18px;
+  border-left: 1px solid #d5dbe4;
+}
+
+.request-timeline div {
+  position: relative;
+  min-height: 44px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding-left: 14px;
+}
+
+.request-timeline div span {
+  position: absolute;
+  left: -13px;
+  top: 0;
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  border: 1px solid #cfd6df;
+  display: grid;
+  place-items: center;
+  color: #6b7582;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.request-timeline div.done span {
+  color: #fff;
+  border-color: var(--red);
+  background: var(--red);
+}
+
+.request-timeline p {
+  margin: 2px 0 0 8px;
+  font-size: 13px;
+  color: #46505d;
+}
+
 @media (max-width: 1280px) {
   .app-shell {
     grid-template-columns: 76px minmax(0, 1fr);
@@ -910,6 +1248,14 @@ progress::-webkit-progress-value {
 
   .work-grid {
     grid-template-columns: minmax(330px, 0.9fr) minmax(430px, 1.1fr);
+  }
+
+  .self-service {
+    grid-template-columns: 1fr;
+  }
+
+  .self-side {
+    border-top: 1px solid var(--line);
   }
 
   .ocr-panel {
@@ -950,7 +1296,25 @@ progress::-webkit-progress-value {
 
   .mini-dashboard,
   .work-grid,
-  .two-columns {
+  .two-columns,
+  .self-upload-grid,
+  .self-steps {
     grid-template-columns: 1fr;
+  }
+
+  .self-header,
+  .self-actions,
+  .self-ocr-summary {
+    flex-wrap: wrap;
+  }
+
+  .request-badge {
+    width: 100%;
+  }
+
+  .review-list div {
+    grid-template-columns: 1fr;
+    padding: 10px 0;
+    gap: 4px;
   }
 }

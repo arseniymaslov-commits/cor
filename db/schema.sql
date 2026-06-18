@@ -23,6 +23,14 @@ create type document_status as enum (
   'Черновик'
 );
 
+create type registration_request_status as enum (
+  'Черновик заявки',
+  'На проверке канцелярии',
+  'Вернули на уточнение',
+  'Зарегистрировано',
+  'Отклонено'
+);
+
 create table if not exists users (
   id uuid primary key default uuid_generate_v4(),
   full_name text not null,
@@ -68,6 +76,33 @@ create table if not exists documents (
   created_by uuid references users(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
+);
+
+create table if not exists registration_requests (
+  id uuid primary key default uuid_generate_v4(),
+  request_number text not null unique,
+  official_document_id uuid references documents(id),
+  official_number text,
+  direction text not null check (direction in ('Входящее письмо', 'Исходящее письмо')),
+  sender text,
+  recipient text,
+  addressee text,
+  subject text not null,
+  summary text,
+  owner_id uuid references users(id),
+  owner_name text,
+  department text,
+  status registration_request_status not null default 'Черновик заявки',
+  clerk_comment text,
+  created_at timestamptz not null default now(),
+  submitted_at timestamptz,
+  reviewed_at timestamptz
+);
+
+create index if not exists registration_requests_status_idx on registration_requests(status);
+create index if not exists registration_requests_owner_idx on registration_requests(owner_id);
+create index if not exists registration_requests_search_idx on registration_requests using gin(
+  to_tsvector('simple', coalesce(request_number, '') || ' ' || coalesce(subject, '') || ' ' || coalesce(sender, ''))
 );
 
 create index if not exists documents_direction_idx on documents(direction);

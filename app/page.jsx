@@ -32,21 +32,22 @@ import {
 import { documents as seedDocuments, suggestedOcr, tags } from "../lib/mock-data";
 
 const navItems = [
-  ["Рабочий стол", IconHome, "active", ""],
-  ["Входящие", IconInbox, "", "42"],
-  ["Исходящие", IconSend, "", "18"],
-  ["Черновики", IconFileText, "", "7"],
-  ["На согласовании", IconClipboardList, "", "12"],
-  ["На подписи", IconPencil, "", "5"],
-  ["Просроченные", IconClock, "", "3"],
-  ["Архив", IconArchive, "", ""],
-  ["Шаблоны", IconFileInvoice, "", ""],
-  ["Справочники", IconDatabase, "", ""],
-  ["Маршруты", IconShieldLock, "", ""],
-  ["Отчеты и аналитика", IconLayoutDashboard, "", ""],
-  ["Уведомления", IconBell, "", ""],
-  ["Настройки", IconSettings, "", ""],
-  ["Пользователи и роли", IconUsers, "", ""]
+  ["clerk", "Рабочий стол", IconHome, ""],
+  ["self-service", "Подать письмо", IconFileText, "новое"],
+  ["clerk", "Входящие", IconInbox, "42"],
+  ["clerk", "Исходящие", IconSend, "18"],
+  ["clerk", "Черновики", IconFileText, "7"],
+  ["clerk", "На согласовании", IconClipboardList, "12"],
+  ["clerk", "На подписи", IconPencil, "5"],
+  ["clerk", "Просроченные", IconClock, "3"],
+  ["clerk", "Архив", IconArchive, ""],
+  ["clerk", "Шаблоны", IconFileInvoice, ""],
+  ["clerk", "Справочники", IconDatabase, ""],
+  ["clerk", "Маршруты", IconShieldLock, ""],
+  ["clerk", "Отчеты и аналитика", IconLayoutDashboard, ""],
+  ["clerk", "Уведомления", IconBell, ""],
+  ["clerk", "Настройки", IconSettings, ""],
+  ["clerk", "Пользователи и роли", IconUsers, ""]
 ];
 
 const statusMap = {
@@ -67,15 +68,19 @@ function StatusChip({ status }) {
   return <span className={clsx("status-chip", statusMap[status] || "gray")}>{status}</span>;
 }
 
-function Sidebar() {
+function Sidebar({ activeView, setActiveView }) {
   return (
     <aside className="sidebar">
       <div className="brand">
         <Image src="/logo.png" alt="Red Petroleum" width={160} height={55} priority />
       </div>
       <nav className="nav-list" aria-label="Основная навигация">
-        {navItems.map(([label, Icon, state, count]) => (
-          <button key={label} className={clsx("nav-item", state)}>
+        {navItems.map(([view, label, Icon, count]) => (
+          <button
+            key={label}
+            className={clsx("nav-item", activeView === view && label === (view === "clerk" ? "Рабочий стол" : "Подать письмо") && "active")}
+            onClick={() => setActiveView(view)}
+          >
             <Icon size={18} stroke={1.85} />
             <span>{label}</span>
             {count ? <strong>{count}</strong> : null}
@@ -90,12 +95,12 @@ function Sidebar() {
   );
 }
 
-function Topbar() {
+function Topbar({ title, subtitle, userName = "Алия М.", userRole = "Делопроизводитель" }) {
   return (
     <header className="topbar">
       <div>
-        <h1>Канцелярия / Делопроизводитель</h1>
-        <p>Рабочее место</p>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
       </div>
       <div className="topbar-actions">
         <button className="icon-button" aria-label="Уведомления">
@@ -106,10 +111,10 @@ function Topbar() {
           <span className="question">?</span>
         </button>
         <div className="profile">
-          <span className="avatar">АМ</span>
+          <span className="avatar">{userName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
           <div>
-            <strong>Алия М.</strong>
-            <small>Делопроизводитель</small>
+            <strong>{userName}</strong>
+            <small>{userRole}</small>
           </div>
           <IconChevronDown size={16} />
         </div>
@@ -376,8 +381,217 @@ function OcrPanel({ ocr, onRunOcr, isProcessing, onExport }) {
   );
 }
 
+function SelfServicePortal() {
+  const [direction, setDirection] = useState("Входящее письмо");
+  const [step, setStep] = useState(1);
+  const [ocr, setOcr] = useState(suggestedOcr);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [submitState, setSubmitState] = useState("idle");
+  const [requestNumber, setRequestNumber] = useState("ЗАЯВКА-2026-06-0012");
+
+  async function runSelfOcr() {
+    setIsProcessing(true);
+    const response = await fetch("/api/ocr", { method: "POST" });
+    const payload = await response.json();
+    setOcr(payload);
+    setIsProcessing(false);
+    setStep(2);
+  }
+
+  async function submitRequest() {
+    setSubmitState("sending");
+    const response = await fetch("/api/submissions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        direction,
+        sender: "Министерство финансов КР",
+        recipient: "ОсОО «Red Petroleum»",
+        subject: "О предоставлении отчетности за II квартал 2026 года",
+        owner: "Данияр К."
+      })
+    });
+    const payload = await response.json();
+    setRequestNumber(payload.request.request_number);
+    setSubmitState("sent");
+    setStep(3);
+  }
+
+  return (
+    <section className="self-service">
+      <div className="self-main">
+        <div className="self-header">
+          <div>
+            <h2>Самостоятельная подача письма</h2>
+            <p>Заполните заявку, приложите файл и отправьте в канцелярию на проверку.</p>
+          </div>
+          <div className="request-badge">
+            <span>Временный номер</span>
+            <strong>{requestNumber}</strong>
+          </div>
+        </div>
+
+        <div className="direction-switch">
+          {["Входящее письмо", "Исходящее письмо"].map((item) => (
+            <button
+              key={item}
+              className={direction === item ? "active" : ""}
+              onClick={() => setDirection(item)}
+            >
+              {item}
+            </button>
+          ))}
+        </div>
+
+        <div className="self-steps">
+          {["Файл", "Данные", "Отправка"].map((item, index) => (
+            <button
+              key={item}
+              className={clsx(step === index + 1 && "active", step > index + 1 && "done")}
+              onClick={() => setStep(index + 1)}
+            >
+              <span>{index + 1}</span>
+              {item}
+            </button>
+          ))}
+        </div>
+
+        <div className="self-content">
+          {step === 1 ? (
+            <div className="self-upload-grid">
+              <div className="upload-zone self-upload">
+                <IconUpload size={52} stroke={1.6} />
+                <strong>Загрузите скан, PDF или фото письма</strong>
+                <small>PDF, JPG, PNG, TIF. Канцелярия увидит файл вместе с заявкой.</small>
+              </div>
+              <div className="self-note">
+                <h3>Что произойдет дальше</h3>
+                <p>OCR предложит заполнить поля. Вы сможете исправить данные перед отправкой.</p>
+                <button className="primary-button" onClick={runSelfOcr}>
+                  <IconSparkles size={17} />
+                  {isProcessing ? "Распознаем..." : "Загрузить и распознать"}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 2 ? (
+            <div className="self-form">
+              <div className="two-columns">
+                <Field label="Тип заявки">
+                  <input value={direction} readOnly />
+                </Field>
+                <Field label="Статус">
+                  <input value="Черновик заявки" readOnly />
+                </Field>
+              </div>
+              <div className="two-columns">
+                <Field label="Отправитель" required>
+                  <input defaultValue="Министерство финансов КР" />
+                </Field>
+                <Field label="Получатель" required>
+                  <input defaultValue="ОсОО «Red Petroleum»" />
+                </Field>
+              </div>
+              <Field label="Тема / Заголовок" required>
+                <input defaultValue="О предоставлении отчетности за II квартал 2026 года" />
+              </Field>
+              <Field label="Краткое содержание">
+                <textarea defaultValue="Просим зарегистрировать письмо и направить его в канцелярию для проверки реквизитов." />
+              </Field>
+              <div className="two-columns">
+                <Field label="Адресат">
+                  <select defaultValue="Канцелярия">
+                    <option>Канцелярия</option>
+                    <option>Заместитель генерального директора</option>
+                    <option>Финансовый отдел</option>
+                  </select>
+                </Field>
+                <Field label="Желаемый срок">
+                  <div className="control">
+                    <input defaultValue="10.06.2026" />
+                    <IconCalendar size={17} />
+                  </div>
+                </Field>
+              </div>
+              <div className="self-ocr-summary">
+                <strong>OCR: уверенность {ocr.confidence}%</strong>
+                <span>Найдено полей: {ocr.fields.length}. Номер письма: 03-12/5678.</span>
+              </div>
+            </div>
+          ) : null}
+
+          {step === 3 ? (
+            <div className="self-review">
+              <div className={clsx("result-panel", submitState === "sent" && "sent")}>
+                <IconCheck size={28} />
+                <div>
+                  <h3>{submitState === "sent" ? "Заявка отправлена в канцелярию" : "Проверьте заявку перед отправкой"}</h3>
+                  <p>
+                    {submitState === "sent"
+                      ? "Канцелярия проверит реквизиты и присвоит официальный входящий или исходящий номер."
+                      : "После отправки письмо получит статус «На проверке канцелярии»."}
+                  </p>
+                </div>
+              </div>
+              <div className="review-list">
+                <div><span>Заявка</span><strong>{requestNumber}</strong></div>
+                <div><span>Тип</span><strong>{direction}</strong></div>
+                <div><span>Тема</span><strong>О предоставлении отчетности за II квартал 2026 года</strong></div>
+                <div><span>Следующий шаг</span><strong>Проверка канцелярией</strong></div>
+              </div>
+            </div>
+          ) : null}
+        </div>
+
+        <footer className="self-actions">
+          <button className="secondary-button" onClick={() => setStep(Math.max(1, step - 1))}>Назад</button>
+          {step < 3 ? (
+            <button className="primary-button" onClick={() => setStep(step + 1)}>Продолжить</button>
+          ) : (
+            <button className="primary-button" onClick={submitRequest}>
+              {submitState === "sending" ? "Отправляем..." : "Отправить в канцелярию"}
+            </button>
+          )}
+        </footer>
+      </div>
+
+      <aside className="self-side">
+        <div className="section-heading">
+          <h2>Мои заявки</h2>
+          <span className="status-chip amber">На проверке</span>
+        </div>
+        <div className="self-status-card current">
+          <span>{requestNumber}</span>
+          <strong>{submitState === "sent" ? "На проверке канцелярии" : "Черновик заявки"}</strong>
+          <small>Официальный номер появится после проверки.</small>
+        </div>
+        <div className="request-timeline">
+          {["Создано сотрудником", "OCR выполнен", "Проверка канцелярией", "Официальная регистрация"].map((item, index) => (
+            <div key={item} className={clsx(index < (submitState === "sent" ? 3 : 2) && "done")}>
+              <span>{index + 1}</span>
+              <p>{item}</p>
+            </div>
+          ))}
+        </div>
+        <div className="self-status-card">
+          <span>ЗАЯВКА-2026-06-0011</span>
+          <strong>Зарегистрировано</strong>
+          <small>Присвоен номер ВХ-2026-06-0007</small>
+        </div>
+        <div className="self-status-card">
+          <span>ЗАЯВКА-2026-06-0010</span>
+          <strong>Вернули на уточнение</strong>
+          <small>Канцелярия просит добавить адресата.</small>
+        </div>
+      </aside>
+    </section>
+  );
+}
+
 export default function Home() {
   const [allDocuments] = useState(seedDocuments);
+  const [activeView, setActiveView] = useState("clerk");
   const [selectedId, setSelectedId] = useState(seedDocuments[0].id);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Все");
@@ -430,27 +644,41 @@ export default function Home() {
 
   return (
     <main className="app-shell">
-      <Sidebar />
+      <Sidebar activeView={activeView} setActiveView={setActiveView} />
       <div className="workspace">
-        <Topbar />
-        <div className="work-grid">
-          <Registry
-            documents={filteredDocuments}
-            selectedId={selectedId}
-            setSelectedId={setSelectedId}
-            search={search}
-            setSearch={setSearch}
-            filter={filter}
-            setFilter={setFilter}
-          />
-          <DocumentForm
-            selected={selected}
-            savedMessage={savedMessage}
-            onSaveDraft={() => saveDocument("Черновик")}
-            onSave={() => saveDocument("Новое")}
-          />
-          <OcrPanel ocr={ocr} onRunOcr={runOcr} isProcessing={isProcessing} onExport={exportExcel} />
-        </div>
+        {activeView === "self-service" ? (
+          <>
+            <Topbar
+              title="Подать письмо"
+              subtitle="Самостоятельная регистрация для сотрудников"
+              userName="Данияр К."
+              userRole="Инициатор"
+            />
+            <SelfServicePortal />
+          </>
+        ) : (
+          <>
+            <Topbar title="Канцелярия / Делопроизводитель" subtitle="Рабочее место" />
+            <div className="work-grid">
+              <Registry
+                documents={filteredDocuments}
+                selectedId={selectedId}
+                setSelectedId={setSelectedId}
+                search={search}
+                setSearch={setSearch}
+                filter={filter}
+                setFilter={setFilter}
+              />
+              <DocumentForm
+                selected={selected}
+                savedMessage={savedMessage}
+                onSaveDraft={() => saveDocument("Черновик")}
+                onSave={() => saveDocument("Новое")}
+              />
+              <OcrPanel ocr={ocr} onRunOcr={runOcr} isProcessing={isProcessing} onExport={exportExcel} />
+            </div>
+          </>
+        )}
       </div>
     </main>
   );
