@@ -234,6 +234,121 @@ async function postOcrToServer(files, timeoutMs = 18000) {
   }
 }
 
+async function postJsonWithTimeout(url, payload, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal
+    });
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(data.error || `Сервер вернул ошибку ${response.status}`);
+    }
+
+    return data;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Сервер не ответил за 12 секунд. Проверьте соединение и попробуйте еще раз.");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function getBrowserOcrState() {
+  if (!globalThis.__redPetroleumBrowserOcrState) {
+    globalThis.__redPetroleumBrowserOcrState = {
+      workerPromise: null,
+      queue: Promise.resolve(),
+      jobs: 0
+    };
+  }
+
+  return globalThis.__redPetroleumBrowserOcrState;
+}
+
+async function getBrowserOcrWorker() {
+  const state = getBrowserOcrState();
+
+  if (!state.workerPromise || state.jobs >= 100) {
+    if (state.workerPromise) {
+      const staleWorker = await state.workerPromise.catch(() => null);
+      await staleWorker?.terminate?.().catch(() => {});
+    }
+
+    const { createWorker } = await import("tesseract.js");
+    state.workerPromise = createWorker("rus", 1, {
+      langPath: "https://tessdata.projectnaptha.com/4.0.0_fast",
+      logger: () => {}
+    });
+    state.jobs = 0;
+  }
+
+  return state.workerPromise;
+}
+
+async function runBrowserOcr(task) {
+  const state = getBrowserOcrState();
+  const queuedTask = state.queue.then(async () => {
+    const worker = await getBrowserOcrWorker();
+
+    try {
+      const result = await task(worker);
+      state.jobs += 1;
+      return result;
+    } catch (error) {
+      const failedWorker = await state.workerPromise?.catch(() => null);
+      await failedWorker?.terminate?.().catch(() => {});
+      state.workerPromise = null;
+      state.jobs = 0;
+      throw error;
+    }
+  });
+
+  state.queue = queuedTask.catch(() => {});
+  return queuedTask;
+}
+
+async function prepareImageForOcr(file) {
+  if (typeof window === "undefined" || !file.type?.startsWith("image/") || file.type === "image/tiff") {
+    return file;
+  }
+
+  try {
+    const bitmap = await createImageBitmap(file);
+    const maxSide = 1800;
+    const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+
+    if (scale >= 1) {
+      bitmap.close?.();
+      return file;
+    }
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    const context = canvas.getContext("2d", { alpha: false });
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    bitmap.close?.();
+
+    return await new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob || file), "image/jpeg", 0.88);
+    });
+  } catch {
+    return file;
+  }
+}
+
 async function recognizeOcrInBrowser(files) {
   const imageFiles = files.filter((file) => file.type?.startsWith("image/")).slice(0, 3);
 
@@ -241,25 +356,19 @@ async function recognizeOcrInBrowser(files) {
     throw new Error("Для OCR загрузите изображение JPG, PNG, TIF, BMP или WEBP.");
   }
 
-  const { createWorker } = await import("tesseract.js");
-  const worker = await createWorker(["rus", "eng"], 1, {
-    langPath: "https://tessdata.projectnaptha.com/4.0.0_fast",
-    logger: () => {}
-  });
   const startedAt = Date.now();
   const pages = [];
 
-  try {
-    for (const file of imageFiles) {
-      const result = await worker.recognize(file, { rotateAuto: false });
-      pages.push({
-        fileName: file.name,
-        text: normalizeOcrText(result.data.text),
-        confidence: Math.round(result.data.confidence || 0)
-      });
-    }
-  } finally {
-    await worker.terminate();
+  for (const file of imageFiles) {
+    const result = await runBrowserOcr(async (worker) => {
+      const preparedImage = await prepareImageForOcr(file);
+      return worker.recognize(preparedImage, { rotateAuto: false });
+    });
+    pages.push({
+      fileName: file.name,
+      text: normalizeOcrText(result.data.text),
+      confidence: Math.round(result.data.confidence || 0)
+    });
   }
 
   const extractedText = normalizeOcrText(
@@ -271,7 +380,7 @@ async function recognizeOcrInBrowser(files) {
 
   return {
     confidence,
-    source: `Browser OCR rus+eng · ${Date.now() - startedAt} ms`,
+    source: `Browser OCR rus · ${Date.now() - startedAt} ms`,
     files: files.map((file) => ({
       name: file.name,
       size: file.size,
@@ -279,7 +388,7 @@ async function recognizeOcrInBrowser(files) {
     })),
     fields: inferOcrFields(extractedText, files[0]?.name || ""),
     extractedText: extractedText || "Текст не найден. Проверьте качество скана: контраст, ориентацию, разрешение.",
-    warnings: ["Серверный OCR на Vercel не успел ответить, поэтому распознавание выполнено в браузере."]
+    warnings: ["OCR выполняется в браузере. Повторные распознавания будут быстрее после прогрева."]
   };
 }
 
@@ -845,6 +954,7 @@ function SelfServicePortal({ onRequestCreated }) {
   const [ocr, setOcr] = useState(suggestedOcr);
   const [isProcessing, setIsProcessing] = useState(false);
   const [submitState, setSubmitState] = useState("idle");
+  const [submitError, setSubmitError] = useState("");
   const [requestNumber, setRequestNumber] = useState("Будет присвоен после отправки");
   const [requests, setRequests] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -905,23 +1015,25 @@ function SelfServicePortal({ onRequestCreated }) {
 
   async function submitRequest() {
     setSubmitState("sending");
-    const response = await fetch("/api/submissions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    setSubmitError("");
+
+    try {
+      const payload = await postJsonWithTimeout("/api/submissions", {
         direction,
         ...selfForm,
         owner: "Данияр К.",
         attachments: selectedFiles.map((file) => ({ name: file.name, size: file.size, type: file.type }))
-      })
-    });
-    const payload = await response.json();
-    const createdRequest = payload.request;
-    setRequestNumber(createdRequest.request_number);
-    setRequests((current) => [createdRequest, ...current]);
-    onRequestCreated?.(createdRequest);
-    setSubmitState("sent");
-    setStep(3);
+      });
+      const createdRequest = payload.request;
+      setRequestNumber(createdRequest.request_number);
+      setRequests((current) => [createdRequest, ...current]);
+      onRequestCreated?.(createdRequest);
+      setSubmitState("sent");
+      setStep(3);
+    } catch (error) {
+      setSubmitError(error.message || "Не удалось отправить заявку.");
+      setSubmitState("idle");
+    }
   }
 
   return (
@@ -1068,6 +1180,7 @@ function SelfServicePortal({ onRequestCreated }) {
         </div>
 
         <footer className="self-actions">
+          {submitError ? <span className="submit-error">{submitError}</span> : null}
           <button className="secondary-button" onClick={() => setStep(Math.max(1, step - 1))}>Назад</button>
           {step === 1 ? (
             <button className="primary-button" onClick={runSelfOcr} disabled={isProcessing || selectedFiles.length === 0}>

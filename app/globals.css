@@ -1421,6 +1421,13 @@ progress::-webkit-progress-value {
   padding: 0 24px;
 }
 
+.submit-error {
+  margin-right: auto;
+  color: var(--red);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .self-side {
   min-width: 0;
   background: #fbfbfc;
