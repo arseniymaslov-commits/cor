@@ -284,6 +284,10 @@ async function recognizeOcrInBrowser(files) {
 }
 
 async function recognizeOcr(files) {
+  if (files.length > 0 && typeof window !== "undefined") {
+    return recognizeOcrInBrowser(files);
+  }
+
   try {
     return await postOcrToServer(files);
   } catch (serverError) {
@@ -868,6 +872,11 @@ function SelfServicePortal({ onRequestCreated }) {
 
   async function runSelfOcr() {
     setIsProcessing(true);
+    setOcr((current) => ({
+      ...current,
+      source: "Browser OCR",
+      warnings: ["Распознавание выполняется в браузере. Первый запуск может занять дольше из-за загрузки языковых данных."]
+    }));
 
     try {
       const payload = await recognizeOcr(selectedFiles);
@@ -1194,7 +1203,14 @@ export default function Home() {
 
   async function runOcr(files = []) {
     setIsProcessing(true);
-    setSavedMessage("Распознаем скан...");
+    setSavedMessage(files.length > 0 ? "Распознаем в браузере..." : "Распознаем скан...");
+    if (files.length > 0) {
+      setOcr((current) => ({
+        ...current,
+        source: "Browser OCR",
+        warnings: ["Распознавание выполняется в браузере. Первый запуск может занять дольше из-за загрузки языковых данных."]
+      }));
+    }
 
     try {
       const payload = await recognizeOcr(files);
