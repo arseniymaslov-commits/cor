@@ -118,6 +118,22 @@ function getOcrValue(ocr, label, fallback = "") {
   return ocr.fields.find((field) => field.label === label)?.value || fallback;
 }
 
+function createDocumentDraft(document = blankDocument) {
+  return {
+    type: document.type || "Входящая",
+    date: document.date || new Intl.DateTimeFormat("ru-RU").format(new Date()),
+    sender: document.sender || "",
+    recipient: document.recipient || "ОсОО «Red Petroleum»",
+    addressee: document.addressee || "Заместитель генерального директора",
+    subject: document.subject || "",
+    summary: document.summary || "Просят предоставить финансовую отчетность за II квартал 2026 года в соответствии с требованиями письма.",
+    letterType: document.letterType || "Запрос",
+    deadline: document.deadline || "10.06.2026",
+    executor: document.executor || "Касымов Р. А.",
+    department: document.department || "Финансовый отдел"
+  };
+}
+
 function StatusChip({ status }) {
   return <span className={clsx("status-chip", statusMap[status] || "gray")}>{status}</span>;
 }
@@ -368,58 +384,64 @@ function Field({ label, children, required }) {
   );
 }
 
-function DocumentForm({ selected, savedMessage, onSaveDraft, onSave, onSendManager }) {
+function DocumentForm({ selected, draft, onDraftChange, savedMessage, onSaveDraft, onSave, onSendManager }) {
+  function updateDraft(field, value) {
+    onDraftChange((current) => ({ ...current, [field]: value }));
+  }
+
   return (
     <section className="form-panel">
       <div className="section-heading accent">
-        <h2>Новый входящий документ</h2>
+        <h2>{selected.id === "new" ? "Новый входящий документ" : selected.subject}</h2>
         <IconChevronDown size={18} />
       </div>
       <div className="form-grid">
         <Field label="Регистрационный номер">
           <div className="readonly-input">
-            <span>ВХ-2026-06-0008</span>
+            <span>{selected.number || "Будет присвоен автоматически"}</span>
             <IconShieldLock size={17} />
           </div>
           <small className="hint">Присваивается автоматически</small>
         </Field>
         <Field label="Дата регистрации" required>
           <div className="control">
-            <input defaultValue="03.06.2026" />
+            <input value={draft.date} onChange={(event) => updateDraft("date", event.target.value)} />
             <IconCalendar size={17} />
           </div>
         </Field>
         <Field label="Отправитель" required>
-          <select defaultValue={selected.sender}>
-            <option>{selected.sender}</option>
+          <select value={draft.sender} onChange={(event) => updateDraft("sender", event.target.value)}>
+            <option>{draft.sender}</option>
             <option>Министерство финансов Кыргызской Республики</option>
+            <option>Министерство финансов КР</option>
             <option>ГНС при МФ КР</option>
           </select>
         </Field>
         <Field label="Получатель">
-          <select defaultValue="ОсОО «Red Petroleum»">
+          <select value={draft.recipient} onChange={(event) => updateDraft("recipient", event.target.value)}>
             <option>ОсОО «Red Petroleum»</option>
             <option>Red Petroleum Holding</option>
           </select>
         </Field>
         <Field label="Адресат">
-          <select defaultValue="Заместитель генерального директора">
+          <select value={draft.addressee} onChange={(event) => updateDraft("addressee", event.target.value)}>
             <option>Заместитель генерального директора</option>
+            <option>Канцелярия</option>
             <option>Финансовый отдел</option>
             <option>Юридический отдел</option>
           </select>
         </Field>
         <Field label="Тема / Заголовок" required>
-          <input defaultValue="О предоставлении отчетности за II квартал 2026 года" maxLength={250} />
-          <small className="counter">56 / 250</small>
+          <input value={draft.subject} onChange={(event) => updateDraft("subject", event.target.value)} maxLength={250} />
+          <small className="counter">{draft.subject.length} / 250</small>
         </Field>
         <Field label="Краткое содержание">
-          <textarea defaultValue="Просят предоставить финансовую отчетность за II квартал 2026 года в соответствии с требованиями письма." />
-          <small className="counter">118 / 1000</small>
+          <textarea value={draft.summary} onChange={(event) => updateDraft("summary", event.target.value)} maxLength={1000} />
+          <small className="counter">{draft.summary.length} / 1000</small>
         </Field>
         <div className="two-columns">
           <Field label="Тип письма" required>
-            <select defaultValue="Запрос">
+            <select value={draft.letterType} onChange={(event) => updateDraft("letterType", event.target.value)}>
               <option>Запрос</option>
               <option>Претензия</option>
               <option>Уведомление</option>
@@ -427,21 +449,21 @@ function DocumentForm({ selected, savedMessage, onSaveDraft, onSave, onSendManag
           </Field>
           <Field label="Срок исполнения" required>
             <div className="control">
-              <input defaultValue="10.06.2026" />
+              <input value={draft.deadline} onChange={(event) => updateDraft("deadline", event.target.value)} />
               <IconCalendar size={17} />
             </div>
           </Field>
         </div>
         <div className="two-columns">
           <Field label="Ответственный исполнитель" required>
-            <select defaultValue="Касымов Р. А.">
+            <select value={draft.executor} onChange={(event) => updateDraft("executor", event.target.value)}>
               <option>Касымов Р. А.</option>
               <option>Ибраева Д. Т.</option>
               <option>Садыков Н. Б.</option>
             </select>
           </Field>
           <Field label="Подразделение" required>
-            <select defaultValue="Финансовый отдел">
+            <select value={draft.department} onChange={(event) => updateDraft("department", event.target.value)}>
               <option>Финансовый отдел</option>
               <option>Юридический отдел</option>
               <option>HR</option>
@@ -913,6 +935,7 @@ export default function Home() {
   const [registrationRequests, setRegistrationRequests] = useState([]);
   const [reviewMessage, setReviewMessage] = useState("");
   const [isReviewing, setIsReviewing] = useState(false);
+  const [documentDraft, setDocumentDraft] = useState(createDocumentDraft(blankDocument));
 
   const filteredDocuments = useMemo(() => {
     return allDocuments.filter((doc) => {
@@ -926,6 +949,10 @@ export default function Home() {
   }, [allDocuments, filter, search]);
 
   const selected = allDocuments.find((doc) => doc.id === selectedId) || allDocuments[0] || blankDocument;
+
+  useEffect(() => {
+    setDocumentDraft(createDocumentDraft(selected));
+  }, [selected.id]);
 
   useEffect(() => {
     async function loadSession() {
@@ -980,7 +1007,18 @@ export default function Home() {
     const response = await fetch("/api/ocr", { method: "POST", body: formData });
     const payload = await response.json();
     setOcr(payload);
+    setDocumentDraft((current) => ({
+      ...current,
+      sender: getOcrValue(payload, "Отправитель", current.sender),
+      recipient: getOcrValue(payload, "Получатель", current.recipient),
+      addressee: getOcrValue(payload, "Адресат", current.addressee),
+      subject: getOcrValue(payload, "Тема", current.subject),
+      date: getOcrValue(payload, "Дата письма", current.date),
+      summary: payload.extractedText || current.summary
+    }));
+    setSavedMessage(files.length > 0 ? "OCR применен к форме" : "Данные импортированы из сканера");
     setIsProcessing(false);
+    setTimeout(() => setSavedMessage(""), 2600);
   }
 
   async function saveDocument(status = "Новое") {
@@ -989,11 +1027,17 @@ export default function Home() {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        type: "Входящая",
+        type: documentDraft.type,
         status,
-        sender: "Министерство финансов Кыргызской Республики",
-        recipient: "ОсОО «Red Petroleum»",
-        subject: "О предоставлении отчетности за II квартал 2026 года"
+        sender: documentDraft.sender,
+        recipient: documentDraft.recipient,
+        addressee: documentDraft.addressee,
+        subject: documentDraft.subject,
+        summary: documentDraft.summary,
+        letterType: documentDraft.letterType,
+        executor: documentDraft.executor,
+        department: documentDraft.department,
+        deadline: documentDraft.deadline
       })
     });
     const payload = await response.json();
@@ -1093,6 +1137,8 @@ export default function Home() {
                 <DocumentForm
                   key={selected.id}
                   selected={selected}
+                  draft={documentDraft}
+                  onDraftChange={setDocumentDraft}
                   savedMessage={savedMessage}
                   onSaveDraft={() => saveDocument("Черновик")}
                   onSave={() => saveDocument("Новое")}

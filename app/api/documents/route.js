@@ -27,7 +27,10 @@ function normalizeDocument(document) {
     date: formatDate(document.date || document.registered_at || new Date()),
     sender: document.sender || "",
     recipient: document.recipient || "",
+    addressee: document.addressee || "",
     subject: document.subject || "",
+    summary: document.summary || "",
+    letterType: document.letter_type || document.letterType || "",
     executor: document.executor || document.executor_name || "",
     department: document.department || "",
     deadline: formatDate(document.deadline || document.due_at),
@@ -46,7 +49,7 @@ export async function GET() {
 
   const rows = await sql`
     select id, number, direction as type, registered_at as date, sender, recipient,
-           subject, executor_name as executor, department, due_at as deadline,
+           addressee, subject, summary, letter_type, executor_name as executor, department, due_at as deadline,
            status, is_overdue as overdue
     from documents
     order by registered_at desc, number desc
@@ -93,9 +96,9 @@ export async function POST(request) {
   const number = `${prefix}-${year}-${String(month).padStart(2, "0")}-${String(counter.value).padStart(4, "0")}`;
 
   const [document] = await sql`
-    insert into documents(number, direction, status, sender, recipient, subject, executor_name, department, due_at)
+    insert into documents(number, direction, status, sender, recipient, addressee, subject, summary, letter_type, executor_name, department, due_at)
     values (${number}, ${payload.type}, ${payload.status}, ${payload.sender}, ${payload.recipient},
-            ${payload.subject}, ${payload.executor}, ${payload.department}, ${payload.deadline})
+            ${payload.addressee}, ${payload.subject}, ${payload.summary}, ${payload.letterType}, ${payload.executor}, ${payload.department}, ${payload.deadline})
     returning *
   `;
 
