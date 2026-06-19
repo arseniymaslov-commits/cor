@@ -11,6 +11,7 @@
 - Neon PostgreSQL schema: пользователи, роли, документы, теги, вложения, маршруты, согласования, уведомления, аудит.
 - Excel export через `/api/export`.
 - API заявок на регистрацию через `/api/submissions`.
+- Первый вход по корпоративной почте: пользователь задает пароль, пароль хранится хэшем.
 - Демо-режим без базы: приложение работает сразу, а при наличии `DATABASE_URL` пишет в Neon.
 
 ## Локальный запуск
@@ -30,15 +31,17 @@ npm run dev
 
 ```bash
 DATABASE_URL="postgresql://user:password@ep-example.neon.tech/neondb?sslmode=require"
+AUTH_SECRET="replace-with-a-long-random-secret"
 ```
 
 4. Выполните SQL из `db/schema.sql` в Neon SQL Editor.
+5. Если база уже была создана раньше, выполните также `db/auth-users.sql`.
 
 ## Vercel
 
 1. Загрузите проект в GitHub.
 2. В Vercel выберите `New Project` и импортируйте репозиторий.
-3. В `Environment Variables` добавьте `DATABASE_URL`.
+3. В `Environment Variables` добавьте `DATABASE_URL`, `AUTH_SECRET` и `NEXT_PUBLIC_APP_NAME`.
 4. Deploy.
 
 ## GitHub

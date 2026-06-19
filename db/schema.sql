@@ -37,6 +37,9 @@ create table if not exists users (
   email text not null unique,
   role user_role not null default 'executor',
   department text,
+  password_hash text,
+  must_set_password boolean not null default true,
+  last_login_at timestamptz,
   is_active boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -222,3 +225,12 @@ insert into tags(name, color) values
   ('Уведомление', '#2563eb'),
   ('Запрос информации', '#16a34a')
 on conflict(name) do nothing;
+
+insert into users(full_name, email, role, department, must_set_password, is_active) values
+  ('Арсений Маслов', 'arseniy.maslov@redpetroleum.kg', 'admin', 'Администрация', true, true),
+  ('Зарина Акматова', 'zarina.akmatova@redpetroleum.kg', 'clerk', 'Канцелярия', true, true)
+on conflict(email) do update set
+  full_name = excluded.full_name,
+  role = excluded.role,
+  department = excluded.department,
+  is_active = true;

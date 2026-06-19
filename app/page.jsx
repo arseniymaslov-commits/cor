@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 import {
@@ -20,6 +20,7 @@ import {
   IconHome,
   IconInbox,
   IconLayoutDashboard,
+  IconLogout,
   IconPencil,
   IconSearch,
   IconSend,
@@ -68,14 +69,107 @@ function StatusChip({ status }) {
   return <span className={clsx("status-chip", statusMap[status] || "gray")}>{status}</span>;
 }
 
-function Sidebar({ activeView, setActiveView }) {
+function LoginScreen({ onAuthenticated }) {
+  const [email, setEmail] = useState("arseniy.maslov@redpetroleum.kg");
+  const [password, setPassword] = useState("");
+  const [step, setStep] = useState("check");
+  const [showPassword, setShowPassword] = useState(false);
+  const [message, setMessage] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+
+  async function submit(event) {
+    event.preventDefault();
+    setIsLoading(true);
+    setMessage("");
+
+    const response = await fetch("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        password,
+        mode: step === "set-password" ? "set-password" : showPassword ? "login" : "check"
+      })
+    });
+    const payload = await response.json();
+    setIsLoading(false);
+
+    if (!response.ok) {
+      setMessage(payload.error || "Не удалось войти.");
+      return;
+    }
+
+    if (payload.requiresPasswordSetup) {
+      setStep("set-password");
+      setShowPassword(true);
+      setPassword("");
+      setMessage("Первый вход: придумайте пароль для этой учетной записи.");
+      return;
+    }
+
+    if (!showPassword && step === "check") {
+      setShowPassword(true);
+      setPassword("");
+      setMessage("Пользователь найден. Введите пароль.");
+      return;
+    }
+
+    onAuthenticated(payload.user);
+  }
+
+  return (
+    <main className="login-shell">
+      <section className="login-card">
+        <Image src="/logo.png" alt="Red Petroleum" width={176} height={62} priority />
+        <div>
+          <h1>Вход в ЭДО</h1>
+          <p>Используйте корпоративную почту Red Petroleum.</p>
+        </div>
+        <form onSubmit={submit} className="login-form">
+          <Field label="Корпоративная почта">
+            <input value={email} onChange={(event) => setEmail(event.target.value)} type="email" />
+          </Field>
+          {step === "set-password" || showPassword ? (
+            <Field label={step === "set-password" ? "Новый пароль" : "Пароль"}>
+              <input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                type="password"
+                minLength={8}
+                placeholder="Минимум 8 символов"
+              />
+            </Field>
+          ) : null}
+          {message ? <p className="login-message">{message}</p> : null}
+          <button className="primary-button" type="submit">
+            {isLoading ? "Проверяем..." : step === "set-password" ? "Создать пароль и войти" : "Продолжить"}
+          </button>
+          {step === "check" && !showPassword ? (
+            <button type="button" className="ghost-button" onClick={() => setShowPassword(true)}>
+              У меня уже есть пароль
+            </button>
+          ) : null}
+        </form>
+        <div className="login-users">
+          <strong>Доступы заведены:</strong>
+          <span>arseniy.maslov@redpetroleum.kg — администратор</span>
+          <span>zarina.akmatova@redpetroleum.kg — делопроизводитель</span>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function Sidebar({ activeView, setActiveView, user }) {
+  const canAdmin = user?.role === "admin";
+
   return (
     <aside className="sidebar">
       <div className="brand">
         <Image src="/logo.png" alt="Red Petroleum" width={160} height={55} priority />
       </div>
       <nav className="nav-list" aria-label="Основная навигация">
-        {navItems.map(([view, label, Icon, count]) => (
+        {navItems.filter(([, label]) => canAdmin || label !== "Пользователи и роли").map(([view, label, Icon, count]) => (
           <button
             key={label}
             className={clsx("nav-item", activeView === view && label === (view === "clerk" ? "Рабочий стол" : "Подать письмо") && "active")}
@@ -95,7 +189,10 @@ function Sidebar({ activeView, setActiveView }) {
   );
 }
 
-function Topbar({ title, subtitle, userName = "Алия М.", userRole = "Делопроизводитель" }) {
+function Topbar({ title, subtitle, user, onLogout, userName = "Алия М.", userRole = "Делопроизводитель" }) {
+  const visibleName = user?.fullName || userName;
+  const visibleRole = user?.roleLabel || userRole;
+
   return (
     <header className="topbar">
       <div>
@@ -111,13 +208,16 @@ function Topbar({ title, subtitle, userName = "Алия М.", userRole = "Дел
           <span className="question">?</span>
         </button>
         <div className="profile">
-          <span className="avatar">{userName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
+          <span className="avatar">{visibleName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
           <div>
-            <strong>{userName}</strong>
-            <small>{userRole}</small>
+            <strong>{visibleName}</strong>
+            <small>{visibleRole}</small>
           </div>
           <IconChevronDown size={16} />
         </div>
+        <button className="icon-button" aria-label="Выйти" onClick={onLogout} title="Выйти">
+          <IconLogout size={20} />
+        </button>
       </div>
     </header>
   );
@@ -590,6 +690,8 @@ function SelfServicePortal() {
 }
 
 export default function Home() {
+  const [user, setUser] = useState(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [allDocuments] = useState(seedDocuments);
   const [activeView, setActiveView] = useState("clerk");
   const [selectedId, setSelectedId] = useState(seedDocuments[0].id);
@@ -611,6 +713,25 @@ export default function Home() {
   }, [allDocuments, filter, search]);
 
   const selected = allDocuments.find((doc) => doc.id === selectedId) || allDocuments[0];
+
+  useEffect(() => {
+    async function loadSession() {
+      const response = await fetch("/api/auth/me");
+      if (response.ok) {
+        const payload = await response.json();
+        setUser(payload.user);
+      }
+      setIsAuthLoading(false);
+    }
+
+    loadSession();
+  }, []);
+
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    setUser(null);
+    setActiveView("clerk");
+  }
 
   async function runOcr() {
     setIsProcessing(true);
@@ -642,23 +763,31 @@ export default function Home() {
     window.location.href = "/api/export";
   }
 
+  if (isAuthLoading) {
+    return <main className="loading-screen">Проверяем сессию...</main>;
+  }
+
+  if (!user) {
+    return <LoginScreen onAuthenticated={setUser} />;
+  }
+
   return (
     <main className="app-shell">
-      <Sidebar activeView={activeView} setActiveView={setActiveView} />
+      <Sidebar activeView={activeView} setActiveView={setActiveView} user={user} />
       <div className="workspace">
         {activeView === "self-service" ? (
           <>
             <Topbar
               title="Подать письмо"
               subtitle="Самостоятельная регистрация для сотрудников"
-              userName="Данияр К."
-              userRole="Инициатор"
+              user={user}
+              onLogout={logout}
             />
             <SelfServicePortal />
           </>
         ) : (
           <>
-            <Topbar title="Канцелярия / Делопроизводитель" subtitle="Рабочее место" />
+            <Topbar title="Канцелярия / Делопроизводитель" subtitle="Рабочее место" user={user} onLogout={logout} />
             <div className="work-grid">
               <Registry
                 documents={filteredDocuments}

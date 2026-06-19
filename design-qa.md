@@ -22,12 +22,14 @@ focused region comparison evidence: route timeline, registry rows, OCR upload pa
 - Fixed route-step label wrapping on desktop.
 - Verified OCR interaction, save action, and Excel export response.
 - Added the employee self-service submission screen and verified navigation, OCR-to-data step transition, submission success state, `/api/submissions`, and mobile stacking.
+- Added first-login authentication for the admin and clerk accounts; verified email check, password creation, role display, and logout.
 
 **Implementation Checklist**
 - Build completed with `npm run build`.
 - Local app returned HTTP 200 at `http://127.0.0.1:3000`.
 - `/api/documents`, `/api/documents/next-number`, `/api/ocr`, and `/api/export` are present.
 - `/api/submissions` is present for employee registration requests.
+- `/api/auth/login`, `/api/auth/me`, and `/api/auth/logout` are present for first-login auth.
 - Excel export returned HTTP 200 with XLSX content type.
 - Desktop and mobile screenshots captured.
 
