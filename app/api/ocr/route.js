@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import Tesseract from "tesseract.js";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 25;
 
 const workerPath = path.join(process.cwd(), "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js");
 const supportedImageTypes = new Set(["image/png", "image/jpeg", "image/jpg", "image/tiff", "image/bmp", "image/webp"]);

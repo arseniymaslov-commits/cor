@@ -118,6 +118,69 @@ function getOcrValue(ocr, label, fallback = "") {
   return ocr.fields.find((field) => field.label === label)?.value || fallback;
 }
 
+function normalizeOcrText(text = "") {
+  return text
+    .replace(/\r/g, "\n")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeOcrDate(value = "") {
+  const [day, month, year] = value.replaceAll("-", ".").replaceAll("/", ".").split(".");
+  if (!day || !month || !year) {
+    return value;
+  }
+
+  return `${day.padStart(2, "0")}.${month.padStart(2, "0")}.${year.length === 2 ? `20${year}` : year}`;
+}
+
+function findOcrLine(text, patterns) {
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+
+  for (const pattern of patterns) {
+    const direct = lines.find((line) => pattern.test(line));
+    if (direct) {
+      return direct.replace(pattern, "").replace(/^[:№\-\s]+/, "").trim();
+    }
+  }
+
+  return "";
+}
+
+function inferOcrFields(text, fallbackFileName = "") {
+  const contentText = text
+    .split("\n")
+    .filter((line) => !/^Файл:/i.test(line.trim()))
+    .join("\n");
+  const compact = contentText.replace(/\s+/g, " ");
+  const date = compact.match(/\b([0-3]?\d[./-][01]?\d[./-](?:20)?\d{2})\b/)?.[1] || "";
+  const numberLine = findOcrLine(contentText, [
+    /^(?:номер\s+письма|номер|№)\s*[:№-]*/i,
+    /^(?:исх\.?|вх\.?)\s*[:№-]*/i
+  ]);
+  const number =
+    numberLine.match(/[A-Za-zА-Яа-я0-9/-]{3,}/)?.[0] ||
+    compact.match(/(?:№|номер|исх\.?|вх\.?)\s*[:№-]?\s*([A-Za-zА-Яа-я0-9/-]{3,})/i)?.[1] ||
+    compact.match(/\b\d{1,4}[-/]\d{1,6}\b/)?.[0] ||
+    "";
+  const sender = findOcrLine(contentText, [/^(?:отправитель|исходящий от|от)\s*[:\s-]*/i]) || "";
+  const recipient = findOcrLine(contentText, [/^(?:получатель|адресат|кому)\s*[:\s-]*/i]) || "";
+  const subject =
+    findOcrLine(contentText, [/^(?:тема|касательно)\s*[:\s-]*/i, /^о\s+/i]) ||
+    contentText.split("\n").map((line) => line.trim()).find((line) => line.length > 18 && line.length < 180) ||
+    fallbackFileName.replace(/\.[^.]+$/, "");
+
+  return [
+    { label: "Отправитель", value: sender || "Требуется проверка" },
+    { label: "Дата письма", value: date ? normalizeOcrDate(date) : "Требуется проверка" },
+    { label: "Номер письма", value: number || "Требуется проверка" },
+    { label: "Тема", value: subject || "Требуется проверка" },
+    { label: "Получатель", value: recipient || "ОсОО «Red Petroleum»" },
+    { label: "Адресат", value: recipient || "Канцелярия" }
+  ];
+}
+
 function createDocumentDraft(document = blankDocument) {
   return {
     type: document.type || "Входящая",
@@ -132,6 +195,112 @@ function createDocumentDraft(document = blankDocument) {
     executor: document.executor || "Касымов Р. А.",
     department: document.department || "Финансовый отдел"
   };
+}
+
+async function postOcrToServer(files, timeoutMs = 18000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+    const response = await fetch("/api/ocr", {
+      method: "POST",
+      body: formData,
+      signal: controller.signal
+    });
+    const raw = await response.text();
+    let payload = {};
+
+    try {
+      payload = raw ? JSON.parse(raw) : {};
+    } catch {
+      payload = { error: raw.slice(0, 160) };
+    }
+
+    if (!response.ok) {
+      throw new Error(payload.error || `OCR вернул ошибку ${response.status}`);
+    }
+
+    return payload;
+  } catch (error) {
+    if (error.name === "AbortError") {
+      throw new Error("Серверный OCR не ответил за 18 секунд.");
+    }
+
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function recognizeOcrInBrowser(files) {
+  const imageFiles = files.filter((file) => file.type?.startsWith("image/")).slice(0, 3);
+
+  if (imageFiles.length === 0) {
+    throw new Error("Для OCR загрузите изображение JPG, PNG, TIF, BMP или WEBP.");
+  }
+
+  const { createWorker } = await import("tesseract.js");
+  const worker = await createWorker(["rus", "eng"], 1, {
+    langPath: "https://tessdata.projectnaptha.com/4.0.0_fast",
+    logger: () => {}
+  });
+  const startedAt = Date.now();
+  const pages = [];
+
+  try {
+    for (const file of imageFiles) {
+      const result = await worker.recognize(file, { rotateAuto: false });
+      pages.push({
+        fileName: file.name,
+        text: normalizeOcrText(result.data.text),
+        confidence: Math.round(result.data.confidence || 0)
+      });
+    }
+  } finally {
+    await worker.terminate();
+  }
+
+  const extractedText = normalizeOcrText(
+    pages.map((page) => `Файл: ${page.fileName}\n${page.text}`).join("\n\n")
+  );
+  const confidence = pages.length
+    ? Math.round(pages.reduce((sum, page) => sum + page.confidence, 0) / pages.length)
+    : 0;
+
+  return {
+    confidence,
+    source: `Browser OCR rus+eng · ${Date.now() - startedAt} ms`,
+    files: files.map((file) => ({
+      name: file.name,
+      size: file.size,
+      type: file.type || "application/octet-stream"
+    })),
+    fields: inferOcrFields(extractedText, files[0]?.name || ""),
+    extractedText: extractedText || "Текст не найден. Проверьте качество скана: контраст, ориентацию, разрешение.",
+    warnings: ["Серверный OCR на Vercel не успел ответить, поэтому распознавание выполнено в браузере."]
+  };
+}
+
+async function recognizeOcr(files) {
+  try {
+    return await postOcrToServer(files);
+  } catch (serverError) {
+    if (files.length === 0) {
+      throw serverError;
+    }
+
+    try {
+      const browserPayload = await recognizeOcrInBrowser(files);
+      return {
+        ...browserPayload,
+        warnings: [serverError.message, ...(browserPayload.warnings || [])]
+      };
+    } catch (browserError) {
+      throw new Error(`${serverError.message} ${browserError.message}`);
+    }
+  }
 }
 
 function StatusChip({ status }) {
@@ -701,14 +870,7 @@ function SelfServicePortal({ onRequestCreated }) {
     setIsProcessing(true);
 
     try {
-      const formData = new FormData();
-      selectedFiles.forEach((file) => formData.append("files", file));
-      const response = await fetch("/api/ocr", { method: "POST", body: formData });
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(payload.error || `OCR вернул ошибку ${response.status}`);
-      }
+      const payload = await recognizeOcr(selectedFiles);
 
       setOcr(payload);
       setSelfForm((current) => ({
@@ -1035,14 +1197,7 @@ export default function Home() {
     setSavedMessage("Распознаем скан...");
 
     try {
-      const formData = new FormData();
-      files.forEach((file) => formData.append("files", file));
-      const response = await fetch("/api/ocr", { method: "POST", body: formData });
-      const payload = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(payload.error || `OCR вернул ошибку ${response.status}`);
-      }
+      const payload = await recognizeOcr(files);
 
       setOcr(payload);
       setDocumentDraft((current) => ({
