@@ -699,20 +699,37 @@ function SelfServicePortal({ onRequestCreated }) {
 
   async function runSelfOcr() {
     setIsProcessing(true);
-    const formData = new FormData();
-    selectedFiles.forEach((file) => formData.append("files", file));
-    const response = await fetch("/api/ocr", { method: "POST", body: formData });
-    const payload = await response.json();
-    setOcr(payload);
-    setSelfForm((current) => ({
-      ...current,
-      sender: getOcrValue(payload, "Отправитель", current.sender),
-      recipient: getOcrValue(payload, "Получатель", current.recipient),
-      subject: getOcrValue(payload, "Тема", current.subject),
-      addressee: getOcrValue(payload, "Адресат", current.addressee)
-    }));
-    setIsProcessing(false);
-    setStep(2);
+
+    try {
+      const formData = new FormData();
+      selectedFiles.forEach((file) => formData.append("files", file));
+      const response = await fetch("/api/ocr", { method: "POST", body: formData });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload.error || `OCR вернул ошибку ${response.status}`);
+      }
+
+      setOcr(payload);
+      setSelfForm((current) => ({
+        ...current,
+        sender: getOcrValue(payload, "Отправитель", current.sender),
+        recipient: getOcrValue(payload, "Получатель", current.recipient),
+        subject: getOcrValue(payload, "Тема", current.subject),
+        addressee: getOcrValue(payload, "Адресат", current.addressee)
+      }));
+      setStep(2);
+    } catch (error) {
+      setOcr((current) => ({
+        ...current,
+        confidence: 0,
+        source: "OCR error",
+        warnings: [error.message || "Не удалось распознать файл."],
+        extractedText: "OCR не выполнен. Попробуйте другой JPG/PNG или повторите позже."
+      }));
+    } finally {
+      setIsProcessing(false);
+    }
   }
 
   async function submitRequest() {
@@ -1015,23 +1032,42 @@ export default function Home() {
 
   async function runOcr(files = []) {
     setIsProcessing(true);
-    const formData = new FormData();
-    files.forEach((file) => formData.append("files", file));
-    const response = await fetch("/api/ocr", { method: "POST", body: formData });
-    const payload = await response.json();
-    setOcr(payload);
-    setDocumentDraft((current) => ({
-      ...current,
-      sender: getOcrValue(payload, "Отправитель", current.sender),
-      recipient: getOcrValue(payload, "Получатель", current.recipient),
-      addressee: getOcrValue(payload, "Адресат", current.addressee),
-      subject: getOcrValue(payload, "Тема", current.subject),
-      date: getOcrValue(payload, "Дата письма", current.date),
-      summary: payload.extractedText || current.summary
-    }));
-    setSavedMessage(files.length > 0 ? "OCR применен к форме" : "Данные импортированы из сканера");
-    setIsProcessing(false);
-    setTimeout(() => setSavedMessage(""), 2600);
+    setSavedMessage("Распознаем скан...");
+
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+      const response = await fetch("/api/ocr", { method: "POST", body: formData });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(payload.error || `OCR вернул ошибку ${response.status}`);
+      }
+
+      setOcr(payload);
+      setDocumentDraft((current) => ({
+        ...current,
+        sender: getOcrValue(payload, "Отправитель", current.sender),
+        recipient: getOcrValue(payload, "Получатель", current.recipient),
+        addressee: getOcrValue(payload, "Адресат", current.addressee),
+        subject: getOcrValue(payload, "Тема", current.subject),
+        date: getOcrValue(payload, "Дата письма", current.date),
+        summary: payload.extractedText || current.summary
+      }));
+      setSavedMessage(files.length > 0 ? "OCR применен к форме" : "Данные импортированы из сканера");
+    } catch (error) {
+      setOcr((current) => ({
+        ...current,
+        confidence: 0,
+        source: "OCR error",
+        warnings: [error.message || "Не удалось распознать файл."],
+        extractedText: "OCR не выполнен. Попробуйте другой JPG/PNG или повторите позже."
+      }));
+      setSavedMessage("OCR не выполнен");
+    } finally {
+      setIsProcessing(false);
+      setTimeout(() => setSavedMessage(""), 3200);
+    }
   }
 
   async function saveDocument(status = "Новое") {
