@@ -35,12 +35,12 @@ import { documents as seedDocuments, suggestedOcr, tags } from "../lib/mock-data
 const navItems = [
   ["clerk", "Рабочий стол", IconHome, ""],
   ["self-service", "Подать письмо", IconFileText, "новое"],
-  ["clerk", "Входящие", IconInbox, "42"],
-  ["clerk", "Исходящие", IconSend, "18"],
-  ["clerk", "Черновики", IconFileText, "7"],
-  ["clerk", "На согласовании", IconClipboardList, "12"],
-  ["clerk", "На подписи", IconPencil, "5"],
-  ["clerk", "Просроченные", IconClock, "3"],
+  ["clerk", "Входящие", IconInbox, ""],
+  ["clerk", "Исходящие", IconSend, ""],
+  ["clerk", "Черновики", IconFileText, ""],
+  ["clerk", "На согласовании", IconClipboardList, ""],
+  ["clerk", "На подписи", IconPencil, ""],
+  ["clerk", "Просроченные", IconClock, ""],
   ["clerk", "Архив", IconArchive, ""],
   ["clerk", "Шаблоны", IconFileInvoice, ""],
   ["clerk", "Справочники", IconDatabase, ""],
@@ -64,6 +64,21 @@ const statusMap = {
 };
 
 const routeSteps = ["Регистрация", "Рассмотрение", "Исполнение", "Согласование", "Подпись", "Архив"];
+
+const blankDocument = {
+  id: "new",
+  number: "",
+  type: "Входящая",
+  date: "",
+  sender: "Министерство финансов Кыргызской Республики",
+  recipient: "ОсОО «Red Petroleum»",
+  subject: "О предоставлении отчетности за II квартал 2026 года",
+  executor: "Касымов Р. А.",
+  department: "Финансовый отдел",
+  deadline: "10.06.2026",
+  status: "Новое",
+  overdue: false
+};
 
 function StatusChip({ status }) {
   return <span className={clsx("status-chip", statusMap[status] || "gray")}>{status}</span>;
@@ -279,9 +294,15 @@ function Registry({ documents, selectedId, setSelectedId, search, setSearch, fil
             </span>
           </button>
         ))}
+        {documents.length === 0 ? (
+          <div className="empty-state">
+            <strong>Реестр пока пустой</strong>
+            <span>Создайте первый документ или отправьте заявку на регистрацию.</span>
+          </div>
+        ) : null}
       </div>
       <footer className="pagination">
-        <span>Показано 1-25 из 128</span>
+        <span>Показано {documents.length} из {documents.length}</span>
         <div>
           <button>‹</button>
           <button className="active">1</button>
@@ -487,7 +508,20 @@ function SelfServicePortal() {
   const [ocr, setOcr] = useState(suggestedOcr);
   const [isProcessing, setIsProcessing] = useState(false);
   const [submitState, setSubmitState] = useState("idle");
-  const [requestNumber, setRequestNumber] = useState("ЗАЯВКА-2026-06-0012");
+  const [requestNumber, setRequestNumber] = useState("Будет присвоен после отправки");
+  const [requests, setRequests] = useState([]);
+
+  useEffect(() => {
+    async function loadRequests() {
+      const response = await fetch("/api/submissions");
+      if (response.ok) {
+        const payload = await response.json();
+        setRequests(payload.requests || []);
+      }
+    }
+
+    loadRequests();
+  }, []);
 
   async function runSelfOcr() {
     setIsProcessing(true);
@@ -512,7 +546,9 @@ function SelfServicePortal() {
       })
     });
     const payload = await response.json();
-    setRequestNumber(payload.request.request_number);
+    const createdRequest = payload.request;
+    setRequestNumber(createdRequest.request_number);
+    setRequests((current) => [createdRequest, ...current]);
     setSubmitState("sent");
     setStep(3);
   }
@@ -674,16 +710,20 @@ function SelfServicePortal() {
             </div>
           ))}
         </div>
-        <div className="self-status-card">
-          <span>ЗАЯВКА-2026-06-0011</span>
-          <strong>Зарегистрировано</strong>
-          <small>Присвоен номер ВХ-2026-06-0007</small>
-        </div>
-        <div className="self-status-card">
-          <span>ЗАЯВКА-2026-06-0010</span>
-          <strong>Вернули на уточнение</strong>
-          <small>Канцелярия просит добавить адресата.</small>
-        </div>
+        {requests.length === 0 ? (
+          <div className="self-status-card">
+            <span>Нет заявок</span>
+            <strong>История пока пустая</strong>
+            <small>После отправки заявки она появится здесь.</small>
+          </div>
+        ) : null}
+        {requests.filter((request) => request.request_number !== requestNumber).map((request) => (
+          <div className="self-status-card" key={request.id}>
+            <span>{request.request_number}</span>
+            <strong>{request.status}</strong>
+            <small>{request.official_number ? `Присвоен номер ${request.official_number}` : request.subject}</small>
+          </div>
+        ))}
       </aside>
     </section>
   );
@@ -692,9 +732,9 @@ function SelfServicePortal() {
 export default function Home() {
   const [user, setUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [allDocuments] = useState(seedDocuments);
+  const [allDocuments, setAllDocuments] = useState(seedDocuments);
   const [activeView, setActiveView] = useState("clerk");
-  const [selectedId, setSelectedId] = useState(seedDocuments[0].id);
+  const [selectedId, setSelectedId] = useState(seedDocuments[0]?.id || "new");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Все");
   const [ocr, setOcr] = useState(suggestedOcr);
@@ -712,7 +752,7 @@ export default function Home() {
     });
   }, [allDocuments, filter, search]);
 
-  const selected = allDocuments.find((doc) => doc.id === selectedId) || allDocuments[0];
+  const selected = allDocuments.find((doc) => doc.id === selectedId) || allDocuments[0] || blankDocument;
 
   useEffect(() => {
     async function loadSession() {
@@ -726,6 +766,24 @@ export default function Home() {
 
     loadSession();
   }, []);
+
+  useEffect(() => {
+    async function loadDocuments() {
+      if (!user) {
+        return;
+      }
+
+      const response = await fetch("/api/documents");
+      if (response.ok) {
+        const payload = await response.json();
+        const nextDocuments = payload.documents || [];
+        setAllDocuments(nextDocuments);
+        setSelectedId(nextDocuments[0]?.id || "new");
+      }
+    }
+
+    loadDocuments();
+  }, [user]);
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
@@ -755,6 +813,10 @@ export default function Home() {
       })
     });
     const payload = await response.json();
+    if (payload.document) {
+      setAllDocuments((current) => [payload.document, ...current]);
+      setSelectedId(payload.document.id);
+    }
     setSavedMessage(payload.database === "connected" ? "Сохранено в Neon" : "Сохранено в демо-режиме");
     setTimeout(() => setSavedMessage(""), 2600);
   }

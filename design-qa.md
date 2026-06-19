@@ -23,6 +23,7 @@ focused region comparison evidence: route timeline, registry rows, OCR upload pa
 - Verified OCR interaction, save action, and Excel export response.
 - Added the employee self-service submission screen and verified navigation, OCR-to-data step transition, submission success state, `/api/submissions`, and mobile stacking.
 - Added first-login authentication for the admin and clerk accounts; verified email check, password creation, role display, and logout.
+- Removed previous demo documents and demo requests; verified empty registry state, empty submission history, API-backed load, and adding a new document into the visible register.
 
 **Implementation Checklist**
 - Build completed with `npm run build`.
@@ -30,6 +31,7 @@ focused region comparison evidence: route timeline, registry rows, OCR upload pa
 - `/api/documents`, `/api/documents/next-number`, `/api/ocr`, and `/api/export` are present.
 - `/api/submissions` is present for employee registration requests.
 - `/api/auth/login`, `/api/auth/me`, and `/api/auth/logout` are present for first-login auth.
+- `/api/documents`, `/api/submissions`, and `/api/export` no longer return old seeded demo rows.
 - Excel export returned HTTP 200 with XLSX content type.
 - Desktop and mobile screenshots captured.
 

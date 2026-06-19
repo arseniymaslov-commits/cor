@@ -1,12 +1,36 @@
 import { NextResponse } from "next/server";
-import { documents } from "../../../lib/mock-data";
 import { getSql, toDatabaseDocument } from "../../../lib/db";
+
+function formatDate(value) {
+  if (!value) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("ru-RU").format(new Date(value));
+}
+
+function normalizeDocument(document) {
+  return {
+    id: document.id,
+    number: document.number,
+    type: document.type || document.direction,
+    date: formatDate(document.date || document.registered_at || new Date()),
+    sender: document.sender || "",
+    recipient: document.recipient || "",
+    subject: document.subject || "",
+    executor: document.executor || document.executor_name || "",
+    department: document.department || "",
+    deadline: formatDate(document.deadline || document.due_at),
+    status: document.status || "Новое",
+    overdue: Boolean(document.overdue || document.is_overdue)
+  };
+}
 
 export async function GET() {
   const sql = getSql();
 
   if (!sql) {
-    return NextResponse.json({ database: "demo", documents });
+    return NextResponse.json({ database: "demo", documents: [] });
   }
 
   const rows = await sql`
@@ -18,7 +42,7 @@ export async function GET() {
     limit 100
   `;
 
-  return NextResponse.json({ database: "connected", documents: rows });
+  return NextResponse.json({ database: "connected", documents: rows.map(normalizeDocument) });
 }
 
 export async function POST(request) {
@@ -26,25 +50,32 @@ export async function POST(request) {
   const payload = toDatabaseDocument(await request.json());
 
   if (!sql) {
+    const now = new Date();
+    const prefix = payload.type === "Исходящая" ? "ИСХ" : "ВХ";
     return NextResponse.json({
       database: "demo",
-      document: {
+      document: normalizeDocument({
         id: crypto.randomUUID(),
-        number: payload.type === "Исходящая" ? "ИСХ-2026-06-0043" : "ВХ-2026-06-0008",
+        number: `${prefix}-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-0001`,
+        direction: payload.type,
+        registered_at: now,
         ...payload
-      }
+      })
     });
   }
 
   const prefix = payload.type === "Исходящая" ? "ИСХ" : "ВХ";
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth() + 1;
   const [counter] = await sql`
     insert into document_counters(prefix, year, month, value)
-    values (${prefix}, 2026, 6, 1)
+    values (${prefix}, ${year}, ${month}, 1)
     on conflict(prefix, year, month)
     do update set value = document_counters.value + 1
     returning value
   `;
-  const number = `${prefix}-2026-06-${String(counter.value).padStart(4, "0")}`;
+  const number = `${prefix}-${year}-${String(month).padStart(2, "0")}-${String(counter.value).padStart(4, "0")}`;
 
   const [document] = await sql`
     insert into documents(number, direction, status, sender, recipient, subject, executor_name, department, due_at)
@@ -58,5 +89,5 @@ export async function POST(request) {
     values (${document.id}, 'document.created', 'Алия М.', ${JSON.stringify({ number, status: payload.status })}::jsonb)
   `;
 
-  return NextResponse.json({ database: "connected", document });
+  return NextResponse.json({ database: "connected", document: normalizeDocument(document) });
 }

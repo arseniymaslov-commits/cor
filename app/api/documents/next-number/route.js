@@ -12,7 +12,7 @@ export async function GET(request) {
   const sql = getSql();
 
   if (!sql) {
-    return NextResponse.json({ number: `${prefix}-${year}-${monthText}-0008`, database: "demo" });
+    return NextResponse.json({ number: `${prefix}-${year}-${monthText}-0001`, database: "demo" });
   }
 
   const [counter] = await sql`
