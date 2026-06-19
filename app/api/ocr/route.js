@@ -8,6 +8,44 @@ export const maxDuration = 60;
 
 const workerPath = path.join(process.cwd(), "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js");
 const supportedImageTypes = new Set(["image/png", "image/jpeg", "image/jpg", "image/tiff", "image/bmp", "image/webp"]);
+const maxWarmWorkerJobs = 150;
+const ocrState = globalThis.__redPetroleumOcrState || {
+  workerPromise: null,
+  queue: Promise.resolve(),
+  jobs: 0
+};
+
+globalThis.__redPetroleumOcrState = ocrState;
+
+async function createOcrWorker() {
+  return Tesseract.createWorker(["rus", "eng"], 1, {
+    workerPath,
+    cachePath: path.join(os.tmpdir(), "red-petroleum-tesseract"),
+    langPath: "https://tessdata.projectnaptha.com/4.0.0_fast",
+    logger: () => {}
+  });
+}
+
+async function getOcrWorker() {
+  if (ocrState.workerPromise && ocrState.jobs >= maxWarmWorkerJobs) {
+    const staleWorker = await ocrState.workerPromise.catch(() => null);
+    await staleWorker?.terminate?.().catch(() => {});
+    ocrState.workerPromise = null;
+    ocrState.jobs = 0;
+  }
+
+  if (!ocrState.workerPromise) {
+    ocrState.workerPromise = createOcrWorker();
+  }
+
+  return ocrState.workerPromise;
+}
+
+async function runQueuedOcr(task) {
+  const queuedTask = ocrState.queue.then(task, task);
+  ocrState.queue = queuedTask.catch(() => {});
+  return queuedTask;
+}
 
 function normalizeText(text = "") {
   return text
@@ -74,22 +112,28 @@ function inferFields(text, fallbackFileName = "") {
 
 async function recognizeImage(file) {
   const buffer = Buffer.from(await file.arrayBuffer());
-  const worker = await Tesseract.createWorker(["rus", "eng"], 1, {
-    workerPath,
-    cachePath: path.join(os.tmpdir(), "red-petroleum-tesseract"),
-    langPath: "https://tessdata.projectnaptha.com/4.0.0_fast",
-    logger: () => {}
-  });
 
-  try {
-    const result = await worker.recognize(buffer, { rotateAuto: true });
-    return {
-      text: normalizeText(result.data.text),
-      confidence: Math.round(result.data.confidence || 0)
-    };
-  } finally {
-    await worker.terminate();
-  }
+  return runQueuedOcr(async () => {
+    const startedAt = Date.now();
+    const worker = await getOcrWorker();
+
+    try {
+      const result = await worker.recognize(buffer, { rotateAuto: false });
+      ocrState.jobs += 1;
+
+      return {
+        text: normalizeText(result.data.text),
+        confidence: Math.round(result.data.confidence || 0),
+        processingMs: Date.now() - startedAt
+      };
+    } catch (error) {
+      const failedWorker = await ocrState.workerPromise.catch(() => null);
+      await failedWorker?.terminate?.().catch(() => {});
+      ocrState.workerPromise = null;
+      ocrState.jobs = 0;
+      throw error;
+    }
+  });
 }
 
 export async function POST(request) {
@@ -150,7 +194,7 @@ export async function POST(request) {
 
   return NextResponse.json({
     confidence,
-    source: "Tesseract OCR rus+eng",
+    source: `Tesseract OCR rus+eng · ${recognizedPages.reduce((sum, page) => sum + (page.processingMs || 0), 0)} ms`,
     files,
     fields: inferFields(extractedText, files[0]?.name || ""),
     extractedText: extractedText || "Текст не найден. Проверьте качество скана: контраст, ориентацию, разрешение.",
