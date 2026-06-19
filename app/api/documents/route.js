@@ -1,12 +1,22 @@
 import { NextResponse } from "next/server";
 import { getSql, toDatabaseDocument } from "../../../lib/db";
+import { getDemoStore, nextDemoNumber } from "../../../lib/demo-store";
 
 function formatDate(value) {
   if (!value) {
     return "";
   }
 
-  return new Intl.DateTimeFormat("ru-RU").format(new Date(value));
+  if (typeof value === "string" && /^\d{2}\.\d{2}\.\d{4}$/.test(value)) {
+    return value;
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return String(value);
+  }
+
+  return new Intl.DateTimeFormat("ru-RU").format(date);
 }
 
 function normalizeDocument(document) {
@@ -30,7 +40,8 @@ export async function GET() {
   const sql = getSql();
 
   if (!sql) {
-    return NextResponse.json({ database: "demo", documents: [] });
+    const store = getDemoStore();
+    return NextResponse.json({ database: "demo", documents: store.documents.map(normalizeDocument) });
   }
 
   const rows = await sql`
@@ -52,15 +63,19 @@ export async function POST(request) {
   if (!sql) {
     const now = new Date();
     const prefix = payload.type === "Исходящая" ? "ИСХ" : "ВХ";
+    const store = getDemoStore();
+    const document = normalizeDocument({
+      id: crypto.randomUUID(),
+      number: nextDemoNumber(prefix),
+      direction: payload.type,
+      registered_at: now,
+      ...payload
+    });
+    store.documents.unshift(document);
+
     return NextResponse.json({
       database: "demo",
-      document: normalizeDocument({
-        id: crypto.randomUUID(),
-        number: `${prefix}-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-0001`,
-        direction: payload.type,
-        registered_at: now,
-        ...payload
-      })
+      document
     });
   }
 

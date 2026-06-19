@@ -60,7 +60,13 @@ const statusMap = {
   "На подписи": "orange",
   "Исполнено": "green",
   "Отправлено": "green",
-  "В архиве": "gray"
+  "В архиве": "gray",
+  "Черновик": "gray",
+  "Черновик заявки": "gray",
+  "На проверке канцелярии": "amber",
+  "Вернули на уточнение": "orange",
+  "Зарегистрировано": "green",
+  "Отклонено": "red"
 };
 
 const routeSteps = ["Регистрация", "Рассмотрение", "Исполнение", "Согласование", "Подпись", "Архив"];
@@ -80,6 +86,15 @@ const blankDocument = {
   overdue: false
 };
 
+const initialSelfForm = {
+  sender: "Министерство финансов КР",
+  recipient: "ОсОО «Red Petroleum»",
+  subject: "О предоставлении отчетности за II квартал 2026 года",
+  summary: "Просим зарегистрировать письмо и направить его в канцелярию для проверки реквизитов.",
+  addressee: "Канцелярия",
+  deadline: "10.06.2026"
+};
+
 const acceptedScanTypes = ".pdf,.jpg,.jpeg,.png,.tif,.tiff";
 
 function formatFileSize(size = 0) {
@@ -97,6 +112,10 @@ function formatFileSize(size = 0) {
 function getFileBadge(fileName = "") {
   const extension = fileName.split(".").pop()?.toUpperCase();
   return extension && extension.length <= 4 ? extension : "FILE";
+}
+
+function getOcrValue(ocr, label, fallback = "") {
+  return ocr.fields.find((field) => field.label === label)?.value || fallback;
 }
 
 function StatusChip({ status }) {
@@ -349,7 +368,7 @@ function Field({ label, children, required }) {
   );
 }
 
-function DocumentForm({ selected, savedMessage, onSaveDraft, onSave }) {
+function DocumentForm({ selected, savedMessage, onSaveDraft, onSave, onSendManager }) {
   return (
     <section className="form-panel">
       <div className="section-heading accent">
@@ -460,7 +479,7 @@ function DocumentForm({ selected, savedMessage, onSaveDraft, onSave }) {
         {savedMessage ? <span className="save-message">{savedMessage}</span> : null}
         <button className="secondary-button" onClick={onSaveDraft}>Сохранить черновик</button>
         <button className="primary-button" onClick={onSave}>Сохранить</button>
-        <button className="outline-button">Направить руководителю</button>
+        <button className="outline-button" onClick={onSendManager}>Направить руководителю</button>
       </footer>
     </section>
   );
@@ -501,7 +520,7 @@ function OcrPanel({ ocr, onRunOcr, isProcessing, onExport }) {
           <IconSparkles size={17} />
           {isProcessing ? "Распознаем..." : "Запустить OCR"}
         </button>
-        <button className="ghost-button">Импорт со сканера Konica</button>
+        <button className="ghost-button" onClick={() => onRunOcr([])} disabled={isProcessing}>Импорт со сканера Konica</button>
         <button className="ghost-button" onClick={onExport}>
           <IconFileExport size={17} />
           Excel
@@ -551,7 +570,68 @@ function OcrPanel({ ocr, onRunOcr, isProcessing, onExport }) {
   );
 }
 
-function SelfServicePortal() {
+function ReviewQueue({ requests, isReviewing, onReview }) {
+  const pendingRequests = requests.filter((request) => request.status === "На проверке канцелярии");
+  const latestRequests = requests.slice(0, 4);
+
+  return (
+    <section className="review-queue">
+      <div className="section-heading">
+        <h2>Проверка канцелярией</h2>
+        <span className="status-chip amber">{pendingRequests.length} на проверке</span>
+      </div>
+      {pendingRequests.length > 0 ? (
+        <div className="review-cards">
+          {pendingRequests.map((request) => (
+            <article className="review-card" key={request.id}>
+              <div className="review-card-head">
+                <div>
+                  <span>{request.request_number}</span>
+                  <strong>{request.subject}</strong>
+                </div>
+                <StatusChip status={request.status} />
+              </div>
+              <dl>
+                <div><dt>Тип</dt><dd>{request.direction}</dd></div>
+                <div><dt>Отправитель</dt><dd>{request.sender}</dd></div>
+                <div><dt>Получатель</dt><dd>{request.recipient}</dd></div>
+                <div><dt>Заявитель</dt><dd>{request.owner || "Сотрудник"}</dd></div>
+              </dl>
+              <div className="review-actions">
+                <button className="primary-button" onClick={() => onReview(request.id, "approve")} disabled={isReviewing}>
+                  <IconCheck size={17} />
+                  Зарегистрировать
+                </button>
+                <button className="secondary-button" onClick={() => onReview(request.id, "return")} disabled={isReviewing}>
+                  Вернуть на уточнение
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state compact">
+          <strong>Нет заявок на проверку</strong>
+          <span>Когда сотрудник отправит письмо, оно появится здесь для регистрации.</span>
+        </div>
+      )}
+      {latestRequests.length > pendingRequests.length ? (
+        <div className="review-history">
+          <h3>Последние заявки</h3>
+          {latestRequests.filter((request) => request.status !== "На проверке канцелярии").map((request) => (
+            <div key={request.id}>
+              <span>{request.request_number}</span>
+              <strong>{request.official_number || request.subject}</strong>
+              <StatusChip status={request.status} />
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SelfServicePortal({ onRequestCreated }) {
   const [direction, setDirection] = useState("Входящее письмо");
   const [step, setStep] = useState(1);
   const [ocr, setOcr] = useState(suggestedOcr);
@@ -560,6 +640,7 @@ function SelfServicePortal() {
   const [requestNumber, setRequestNumber] = useState("Будет присвоен после отправки");
   const [requests, setRequests] = useState([]);
   const [selectedFiles, setSelectedFiles] = useState([]);
+  const [selfForm, setSelfForm] = useState(initialSelfForm);
 
   useEffect(() => {
     async function loadRequests() {
@@ -577,6 +658,10 @@ function SelfServicePortal() {
     setSelectedFiles(Array.from(event.target.files || []));
   }
 
+  function updateSelfForm(field, value) {
+    setSelfForm((current) => ({ ...current, [field]: value }));
+  }
+
   async function runSelfOcr() {
     setIsProcessing(true);
     const formData = new FormData();
@@ -584,6 +669,13 @@ function SelfServicePortal() {
     const response = await fetch("/api/ocr", { method: "POST", body: formData });
     const payload = await response.json();
     setOcr(payload);
+    setSelfForm((current) => ({
+      ...current,
+      sender: getOcrValue(payload, "Отправитель", current.sender),
+      recipient: getOcrValue(payload, "Получатель", current.recipient),
+      subject: getOcrValue(payload, "Тема", current.subject),
+      addressee: getOcrValue(payload, "Адресат", current.addressee)
+    }));
     setIsProcessing(false);
     setStep(2);
   }
@@ -595,16 +687,16 @@ function SelfServicePortal() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         direction,
-        sender: "Министерство финансов КР",
-        recipient: "ОсОО «Red Petroleum»",
-        subject: "О предоставлении отчетности за II квартал 2026 года",
-        owner: "Данияр К."
+        ...selfForm,
+        owner: "Данияр К.",
+        attachments: selectedFiles.map((file) => ({ name: file.name, size: file.size, type: file.type }))
       })
     });
     const payload = await response.json();
     const createdRequest = payload.request;
     setRequestNumber(createdRequest.request_number);
     setRequests((current) => [createdRequest, ...current]);
+    onRequestCreated?.(createdRequest);
     setSubmitState("sent");
     setStep(3);
   }
@@ -640,7 +732,11 @@ function SelfServicePortal() {
             <button
               key={item}
               className={clsx(step === index + 1 && "active", step > index + 1 && "done")}
-              onClick={() => setStep(index + 1)}
+              onClick={() => {
+                if (index === 0 || selectedFiles.length > 0 || step > index + 1) {
+                  setStep(index + 1);
+                }
+              }}
             >
               <span>{index + 1}</span>
               {item}
@@ -690,21 +786,21 @@ function SelfServicePortal() {
               </div>
               <div className="two-columns">
                 <Field label="Отправитель" required>
-                  <input defaultValue="Министерство финансов КР" />
+                  <input value={selfForm.sender} onChange={(event) => updateSelfForm("sender", event.target.value)} />
                 </Field>
                 <Field label="Получатель" required>
-                  <input defaultValue="ОсОО «Red Petroleum»" />
+                  <input value={selfForm.recipient} onChange={(event) => updateSelfForm("recipient", event.target.value)} />
                 </Field>
               </div>
               <Field label="Тема / Заголовок" required>
-                <input defaultValue="О предоставлении отчетности за II квартал 2026 года" />
+                <input value={selfForm.subject} onChange={(event) => updateSelfForm("subject", event.target.value)} />
               </Field>
               <Field label="Краткое содержание">
-                <textarea defaultValue="Просим зарегистрировать письмо и направить его в канцелярию для проверки реквизитов." />
+                <textarea value={selfForm.summary} onChange={(event) => updateSelfForm("summary", event.target.value)} />
               </Field>
               <div className="two-columns">
                 <Field label="Адресат">
-                  <select defaultValue="Канцелярия">
+                  <select value={selfForm.addressee} onChange={(event) => updateSelfForm("addressee", event.target.value)}>
                     <option>Канцелярия</option>
                     <option>Заместитель генерального директора</option>
                     <option>Финансовый отдел</option>
@@ -712,7 +808,7 @@ function SelfServicePortal() {
                 </Field>
                 <Field label="Желаемый срок">
                   <div className="control">
-                    <input defaultValue="10.06.2026" />
+                    <input value={selfForm.deadline} onChange={(event) => updateSelfForm("deadline", event.target.value)} />
                     <IconCalendar size={17} />
                   </div>
                 </Field>
@@ -740,7 +836,8 @@ function SelfServicePortal() {
               <div className="review-list">
                 <div><span>Заявка</span><strong>{requestNumber}</strong></div>
                 <div><span>Тип</span><strong>{direction}</strong></div>
-                <div><span>Тема</span><strong>О предоставлении отчетности за II квартал 2026 года</strong></div>
+                <div><span>Тема</span><strong>{selfForm.subject}</strong></div>
+                <div><span>Файлы</span><strong>{selectedFiles.length > 0 ? selectedFiles.map((file) => file.name).join(", ") : "Не выбраны"}</strong></div>
                 <div><span>Следующий шаг</span><strong>Проверка канцелярией</strong></div>
               </div>
             </div>
@@ -749,8 +846,14 @@ function SelfServicePortal() {
 
         <footer className="self-actions">
           <button className="secondary-button" onClick={() => setStep(Math.max(1, step - 1))}>Назад</button>
-          {step < 3 ? (
-            <button className="primary-button" onClick={() => setStep(step + 1)}>Продолжить</button>
+          {step === 1 ? (
+            <button className="primary-button" onClick={runSelfOcr} disabled={isProcessing || selectedFiles.length === 0}>
+              {isProcessing ? "Распознаем..." : "Продолжить"}
+            </button>
+          ) : step < 3 ? (
+            <button className="primary-button" onClick={() => setStep(step + 1)} disabled={!selfForm.subject.trim() || !selfForm.sender.trim()}>
+              Продолжить
+            </button>
           ) : (
             <button className="primary-button" onClick={submitRequest}>
               {submitState === "sending" ? "Отправляем..." : "Отправить в канцелярию"}
@@ -807,6 +910,9 @@ export default function Home() {
   const [ocr, setOcr] = useState(suggestedOcr);
   const [isProcessing, setIsProcessing] = useState(false);
   const [savedMessage, setSavedMessage] = useState("");
+  const [registrationRequests, setRegistrationRequests] = useState([]);
+  const [reviewMessage, setReviewMessage] = useState("");
+  const [isReviewing, setIsReviewing] = useState(false);
 
   const filteredDocuments = useMemo(() => {
     return allDocuments.filter((doc) => {
@@ -834,22 +940,31 @@ export default function Home() {
     loadSession();
   }, []);
 
-  useEffect(() => {
-    async function loadDocuments() {
-      if (!user) {
-        return;
-      }
-
-      const response = await fetch("/api/documents");
-      if (response.ok) {
-        const payload = await response.json();
-        const nextDocuments = payload.documents || [];
-        setAllDocuments(nextDocuments);
-        setSelectedId(nextDocuments[0]?.id || "new");
-      }
+  async function refreshWorkspace() {
+    if (!user) {
+      return;
     }
 
-    loadDocuments();
+    const [documentsResponse, requestsResponse] = await Promise.all([
+      fetch("/api/documents"),
+      fetch("/api/submissions")
+    ]);
+
+    if (documentsResponse.ok) {
+      const payload = await documentsResponse.json();
+      const nextDocuments = payload.documents || [];
+      setAllDocuments(nextDocuments);
+      setSelectedId((current) => nextDocuments.some((doc) => doc.id === current) ? current : nextDocuments[0]?.id || "new");
+    }
+
+    if (requestsResponse.ok) {
+      const payload = await requestsResponse.json();
+      setRegistrationRequests(payload.requests || []);
+    }
+  }
+
+  useEffect(() => {
+    refreshWorkspace();
   }, [user]);
 
   async function logout() {
@@ -890,6 +1005,45 @@ export default function Home() {
     setTimeout(() => setSavedMessage(""), 2600);
   }
 
+  function handleRequestCreated(request) {
+    setRegistrationRequests((current) => [request, ...current.filter((item) => item.id !== request.id)]);
+  }
+
+  async function reviewRequest(id, action) {
+    setIsReviewing(true);
+    setReviewMessage(action === "approve" ? "Регистрируем заявку..." : "Возвращаем на уточнение...");
+
+    const response = await fetch("/api/submissions", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id,
+        action,
+        comment: action === "return" ? "Канцелярия просит уточнить реквизиты письма." : ""
+      })
+    });
+    const payload = await response.json();
+    setIsReviewing(false);
+
+    if (!response.ok) {
+      setReviewMessage(payload.error || "Не удалось обработать заявку.");
+      setTimeout(() => setReviewMessage(""), 3000);
+      return;
+    }
+
+    setRegistrationRequests((current) =>
+      current.map((request) => (request.id === id ? payload.request : request))
+    );
+
+    if (payload.document) {
+      setAllDocuments((current) => [payload.document, ...current.filter((doc) => doc.id !== payload.document.id)]);
+      setSelectedId(payload.document.id);
+    }
+
+    setReviewMessage(action === "approve" ? `Заявка зарегистрирована: ${payload.request.official_number}` : "Заявка возвращена на уточнение");
+    setTimeout(() => setReviewMessage(""), 3200);
+  }
+
   function exportExcel() {
     window.location.href = "/api/export";
   }
@@ -914,7 +1068,7 @@ export default function Home() {
               user={user}
               onLogout={logout}
             />
-            <SelfServicePortal />
+            <SelfServicePortal onRequestCreated={handleRequestCreated} />
           </>
         ) : (
           <>
@@ -929,12 +1083,22 @@ export default function Home() {
                 filter={filter}
                 setFilter={setFilter}
               />
-              <DocumentForm
-                selected={selected}
-                savedMessage={savedMessage}
-                onSaveDraft={() => saveDocument("Черновик")}
-                onSave={() => saveDocument("Новое")}
-              />
+              <div className="center-stack">
+                <ReviewQueue
+                  requests={registrationRequests}
+                  isReviewing={isReviewing}
+                  onReview={reviewRequest}
+                />
+                {reviewMessage ? <div className="stack-message">{reviewMessage}</div> : null}
+                <DocumentForm
+                  key={selected.id}
+                  selected={selected}
+                  savedMessage={savedMessage}
+                  onSaveDraft={() => saveDocument("Черновик")}
+                  onSave={() => saveDocument("Новое")}
+                  onSendManager={() => saveDocument("На рассмотрении")}
+                />
+              </div>
               <OcrPanel ocr={ocr} onRunOcr={runOcr} isProcessing={isProcessing} onExport={exportExcel} />
             </div>
           </>
