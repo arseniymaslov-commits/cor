@@ -80,6 +80,25 @@ const blankDocument = {
   overdue: false
 };
 
+const acceptedScanTypes = ".pdf,.jpg,.jpeg,.png,.tif,.tiff";
+
+function formatFileSize(size = 0) {
+  if (size < 1024) {
+    return `${size} B`;
+  }
+
+  if (size < 1024 * 1024) {
+    return `${(size / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function getFileBadge(fileName = "") {
+  const extension = fileName.split(".").pop()?.toUpperCase();
+  return extension && extension.length <= 4 ? extension : "FILE";
+}
+
 function StatusChip({ status }) {
   return <span className={clsx("status-chip", statusMap[status] || "gray")}>{status}</span>;
 }
@@ -448,19 +467,37 @@ function DocumentForm({ selected, savedMessage, onSaveDraft, onSave }) {
 }
 
 function OcrPanel({ ocr, onRunOcr, isProcessing, onExport }) {
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const attachmentFiles = selectedFiles.length > 0 ? selectedFiles : ocr.files || [];
+
+  function handleFilesChange(event) {
+    setSelectedFiles(Array.from(event.target.files || []));
+  }
+
   return (
     <section className="ocr-panel">
       <div className="section-heading">
         <h2>OCR и вложения</h2>
         <IconChevronDown size={18} />
       </div>
-      <div className="upload-zone">
+      <label className={clsx("upload-zone", selectedFiles.length > 0 && "has-files")}>
+        <input
+          className="file-input"
+          type="file"
+          accept={acceptedScanTypes}
+          multiple
+          onChange={handleFilesChange}
+        />
         <IconUpload size={48} stroke={1.6} />
-        <strong>Перетащите файлы сюда<br />или нажмите для выбора</strong>
-        <small>PDF, JPG, PNG, TIF (до 20 МБ)</small>
-      </div>
+        <strong>{selectedFiles.length > 0 ? "Файл выбран" : "Нажмите, чтобы выбрать скан"}</strong>
+        <small>
+          {selectedFiles.length > 0
+            ? `${selectedFiles.length} файл(ов) готово к распознаванию`
+            : "PDF, JPG, PNG, TIF (до 20 МБ)"}
+        </small>
+      </label>
       <div className="ocr-actions">
-        <button className="primary-button" onClick={onRunOcr}>
+        <button className="primary-button" onClick={() => onRunOcr(selectedFiles)} disabled={isProcessing || selectedFiles.length === 0}>
           <IconSparkles size={17} />
           {isProcessing ? "Распознаем..." : "Запустить OCR"}
         </button>
@@ -488,15 +525,27 @@ function OcrPanel({ ocr, onRunOcr, isProcessing, onExport }) {
         ))}
       </div>
       <div className="attachments">
-        <h3>Вложения (1)</h3>
-        <div className="attachment">
-          <span>PDF</span>
-          <div>
-            <strong>MF_KR_03-12_5678_02.06.2026.pdf</strong>
-            <small>PDF · 1.2 МБ · текст индексирован</small>
+        <h3>Вложения ({attachmentFiles.length})</h3>
+        {attachmentFiles.length > 0 ? (
+          attachmentFiles.map((file) => (
+            <div className="attachment" key={`${file.name}-${file.size}`}>
+              <span>{getFileBadge(file.name)}</span>
+              <div>
+                <strong>{file.name}</strong>
+                <small>{file.type || "Файл"} · {formatFileSize(file.size)} · готов к индексации</small>
+              </div>
+              <button>•••</button>
+            </div>
+          ))
+        ) : (
+          <div className="attachment empty">
+            <span>+</span>
+            <div>
+              <strong>Скан еще не выбран</strong>
+              <small>Выберите PDF, фото или TIFF для распознавания.</small>
+            </div>
           </div>
-          <button>•••</button>
-        </div>
+        )}
       </div>
     </section>
   );
@@ -510,6 +559,7 @@ function SelfServicePortal() {
   const [submitState, setSubmitState] = useState("idle");
   const [requestNumber, setRequestNumber] = useState("Будет присвоен после отправки");
   const [requests, setRequests] = useState([]);
+  const [selectedFiles, setSelectedFiles] = useState([]);
 
   useEffect(() => {
     async function loadRequests() {
@@ -523,9 +573,15 @@ function SelfServicePortal() {
     loadRequests();
   }, []);
 
+  function handleSelfFilesChange(event) {
+    setSelectedFiles(Array.from(event.target.files || []));
+  }
+
   async function runSelfOcr() {
     setIsProcessing(true);
-    const response = await fetch("/api/ocr", { method: "POST" });
+    const formData = new FormData();
+    selectedFiles.forEach((file) => formData.append("files", file));
+    const response = await fetch("/api/ocr", { method: "POST", body: formData });
     const payload = await response.json();
     setOcr(payload);
     setIsProcessing(false);
@@ -595,15 +651,26 @@ function SelfServicePortal() {
         <div className="self-content">
           {step === 1 ? (
             <div className="self-upload-grid">
-              <div className="upload-zone self-upload">
+              <label className={clsx("upload-zone self-upload", selectedFiles.length > 0 && "has-files")}>
+                <input
+                  className="file-input"
+                  type="file"
+                  accept={acceptedScanTypes}
+                  multiple
+                  onChange={handleSelfFilesChange}
+                />
                 <IconUpload size={52} stroke={1.6} />
-                <strong>Загрузите скан, PDF или фото письма</strong>
-                <small>PDF, JPG, PNG, TIF. Канцелярия увидит файл вместе с заявкой.</small>
-              </div>
+                <strong>{selectedFiles.length > 0 ? "Скан выбран" : "Загрузите скан, PDF или фото письма"}</strong>
+                <small>
+                  {selectedFiles.length > 0
+                    ? `${selectedFiles.length} файл(ов): ${selectedFiles.map((file) => file.name).join(", ")}`
+                    : "PDF, JPG, PNG, TIF. Канцелярия увидит файл вместе с заявкой."}
+                </small>
+              </label>
               <div className="self-note">
                 <h3>Что произойдет дальше</h3>
                 <p>OCR предложит заполнить поля. Вы сможете исправить данные перед отправкой.</p>
-                <button className="primary-button" onClick={runSelfOcr}>
+                <button className="primary-button" onClick={runSelfOcr} disabled={isProcessing || selectedFiles.length === 0}>
                   <IconSparkles size={17} />
                   {isProcessing ? "Распознаем..." : "Загрузить и распознать"}
                 </button>
@@ -791,9 +858,11 @@ export default function Home() {
     setActiveView("clerk");
   }
 
-  async function runOcr() {
+  async function runOcr(files = []) {
     setIsProcessing(true);
-    const response = await fetch("/api/ocr", { method: "POST" });
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
+    const response = await fetch("/api/ocr", { method: "POST", body: formData });
     const payload = await response.json();
     setOcr(payload);
     setIsProcessing(false);
