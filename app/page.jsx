@@ -95,7 +95,7 @@ const initialSelfForm = {
   deadline: "10.06.2026"
 };
 
-const acceptedScanTypes = ".pdf,.jpg,.jpeg,.png,.tif,.tiff";
+const acceptedScanTypes = ".jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp";
 
 function formatFileSize(size = 0) {
   if (size < 1024) {
@@ -534,7 +534,7 @@ function OcrPanel({ ocr, onRunOcr, isProcessing, onExport }) {
         <small>
           {selectedFiles.length > 0
             ? `${selectedFiles.length} файл(ов) готово к распознаванию`
-            : "PDF, JPG, PNG, TIF (до 20 МБ)"}
+            : "JPG, PNG, TIF, BMP, WEBP (до 20 МБ)"}
         </small>
       </label>
       <div className="ocr-actions">
@@ -550,11 +550,18 @@ function OcrPanel({ ocr, onRunOcr, isProcessing, onExport }) {
       </div>
       <div className="confidence">
         <div>
-          <span>Распознавание текста</span>
+          <span>Распознавание текста {ocr.source ? `· ${ocr.source}` : ""}</span>
           <strong>Уверенность: {ocr.confidence}%</strong>
         </div>
         <progress value={ocr.confidence} max="100" />
       </div>
+      {ocr.warnings?.length ? (
+        <div className="ocr-warnings">
+          {ocr.warnings.map((warning) => (
+            <span key={warning}>{warning}</span>
+          ))}
+        </div>
+      ) : null}
       <div className="suggestions">
         <h3>Предлагаемые данные <small>(проверьте и подтвердите)</small></h3>
         {ocr.fields.map((item) => (
@@ -565,6 +572,12 @@ function OcrPanel({ ocr, onRunOcr, isProcessing, onExport }) {
           </div>
         ))}
       </div>
+      {ocr.extractedText ? (
+        <div className="ocr-text">
+          <h3>Распознанный текст</h3>
+          <pre>{ocr.extractedText}</pre>
+        </div>
+      ) : null}
       <div className="attachments">
         <h3>Вложения ({attachmentFiles.length})</h3>
         {attachmentFiles.length > 0 ? (
@@ -782,7 +795,7 @@ function SelfServicePortal({ onRequestCreated }) {
                 <small>
                   {selectedFiles.length > 0
                     ? `${selectedFiles.length} файл(ов): ${selectedFiles.map((file) => file.name).join(", ")}`
-                    : "PDF, JPG, PNG, TIF. Канцелярия увидит файл вместе с заявкой."}
+                    : "JPG, PNG, TIF, BMP, WEBP. Канцелярия увидит файл вместе с заявкой."}
                 </small>
               </label>
               <div className="self-note">

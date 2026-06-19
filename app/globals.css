@@ -1037,8 +1037,20 @@ progress::-webkit-progress-value {
 }
 
 .suggestions,
-.attachments {
+.attachments,
+.ocr-text,
+.ocr-warnings {
   padding: 18px;
+}
+
+.ocr-warnings {
+  display: grid;
+  gap: 7px;
+  border-bottom: 1px solid var(--line);
+  color: #a65a00;
+  background: #fff9ed;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .suggestions h3 small {
@@ -1073,6 +1085,30 @@ progress::-webkit-progress-value {
 
 .suggestion-row svg {
   color: var(--green);
+}
+
+.ocr-text {
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.ocr-text h3 {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+
+.ocr-text pre {
+  max-height: 170px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  border-radius: 6px;
+  background: #f7f8fa;
+  color: #303946;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .attachment {
