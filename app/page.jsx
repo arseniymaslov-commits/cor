@@ -234,13 +234,13 @@ async function postOcrToServer(files, timeoutMs = 18000) {
   }
 }
 
-async function postJsonWithTimeout(url, payload, timeoutMs = 12000) {
+async function postJsonWithTimeout(url, payload, timeoutMs = 12000, method = "POST") {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(url, {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
       signal: controller.signal
@@ -1390,35 +1390,30 @@ export default function Home() {
     setIsReviewing(true);
     setReviewMessage(action === "approve" ? "Регистрируем заявку..." : "Возвращаем на уточнение...");
 
-    const response = await fetch("/api/submissions", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    try {
+      const payload = await postJsonWithTimeout("/api/submissions", {
         id,
         action,
         comment: action === "return" ? "Канцелярия просит уточнить реквизиты письма." : ""
-      })
-    });
-    const payload = await response.json();
-    setIsReviewing(false);
+      }, 12000, "PATCH");
 
-    if (!response.ok) {
-      setReviewMessage(payload.error || "Не удалось обработать заявку.");
-      setTimeout(() => setReviewMessage(""), 3000);
-      return;
+      setRegistrationRequests((current) =>
+        current.map((request) => (request.id === id ? payload.request : request))
+      );
+
+      if (payload.document) {
+        setAllDocuments((current) => [payload.document, ...current.filter((doc) => doc.id !== payload.document.id)]);
+        setSelectedId(payload.document.id);
+      }
+
+      setReviewMessage(action === "approve" ? `Заявка зарегистрирована: ${payload.request.official_number}` : "Заявка возвращена на уточнение");
+      setTimeout(() => setReviewMessage(""), 3200);
+    } catch (error) {
+      setReviewMessage(error.message || "Не удалось обработать заявку.");
+      setTimeout(() => setReviewMessage(""), 4200);
+    } finally {
+      setIsReviewing(false);
     }
-
-    setRegistrationRequests((current) =>
-      current.map((request) => (request.id === id ? payload.request : request))
-    );
-
-    if (payload.document) {
-      setAllDocuments((current) => [payload.document, ...current.filter((doc) => doc.id !== payload.document.id)]);
-      setSelectedId(payload.document.id);
-    }
-
-    setReviewMessage(action === "approve" ? `Заявка зарегистрирована: ${payload.request.official_number}` : "Заявка возвращена на уточнение");
-    setTimeout(() => setReviewMessage(""), 3200);
   }
 
   function exportExcel() {

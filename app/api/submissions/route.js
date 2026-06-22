@@ -96,6 +96,26 @@ function createDemoRequest(payload, warning = "") {
   };
 }
 
+function approveDemoSubmission(submission, warning = "") {
+  const prefix = submission.direction === "Исходящее письмо" ? "ИСХ" : "ВХ";
+  const document = requestToDocumentPayload(submission, nextDemoNumber(prefix));
+  const normalizedDocument = normalizeDocument(document);
+  const store = getDemoStore();
+  store.documents.unshift(normalizedDocument);
+
+  submission.status = "Зарегистрировано";
+  submission.official_number = normalizedDocument.number;
+  submission.official_document_id = normalizedDocument.id;
+  submission.reviewed_at = new Date().toISOString();
+
+  return {
+    database: "demo",
+    warning,
+    request: normalizeSubmission(submission),
+    document: normalizedDocument
+  };
+}
+
 async function ensureSubmissionSchema(sql) {
   await sql`
     create table if not exists document_counters (
@@ -128,12 +148,55 @@ async function ensureSubmissionSchema(sql) {
   `;
 
   await sql`alter table registration_requests add column if not exists official_number text`;
+  await sql`alter table registration_requests add column if not exists official_document_id text`;
   await sql`alter table registration_requests add column if not exists addressee text`;
   await sql`alter table registration_requests add column if not exists summary text`;
   await sql`alter table registration_requests add column if not exists owner_name text`;
   await sql`alter table registration_requests add column if not exists clerk_comment text`;
   await sql`alter table registration_requests add column if not exists submitted_at timestamptz`;
   await sql`alter table registration_requests add column if not exists reviewed_at timestamptz`;
+}
+
+async function ensureDocumentSchema(sql) {
+  await sql`
+    create table if not exists documents (
+      id text primary key default md5(random()::text || clock_timestamp()::text),
+      number text not null unique,
+      direction text not null,
+      status text not null default 'Новое',
+      sender text,
+      recipient text,
+      addressee text,
+      subject text not null,
+      summary text,
+      letter_type text,
+      executor_name text,
+      department text,
+      registered_at timestamptz not null default now(),
+      due_at date,
+      is_overdue boolean not null default false
+    )
+  `;
+
+  await sql`alter table documents add column if not exists addressee text`;
+  await sql`alter table documents add column if not exists summary text`;
+  await sql`alter table documents add column if not exists letter_type text`;
+  await sql`alter table documents add column if not exists executor_name text`;
+  await sql`alter table documents add column if not exists department text`;
+  await sql`alter table documents add column if not exists registered_at timestamptz not null default now()`;
+  await sql`alter table documents add column if not exists due_at date`;
+  await sql`alter table documents add column if not exists is_overdue boolean not null default false`;
+
+  await sql`
+    create table if not exists audit_log (
+      id text primary key default md5(random()::text || clock_timestamp()::text),
+      document_id text,
+      action text not null,
+      actor_name text,
+      payload jsonb,
+      created_at timestamptz not null default now()
+    )
+  `;
 }
 
 export async function GET() {
@@ -246,29 +309,22 @@ export async function PATCH(request) {
       return NextResponse.json({ database: "demo", request: normalizeSubmission(submission) });
     }
 
-    const prefix = submission.direction === "Исходящее письмо" ? "ИСХ" : "ВХ";
-    const document = requestToDocumentPayload(submission, nextDemoNumber(prefix));
-    const normalizedDocument = normalizeDocument(document);
-    store.documents.unshift(normalizedDocument);
-
-    submission.status = "Зарегистрировано";
-    submission.official_number = normalizedDocument.number;
-    submission.official_document_id = normalizedDocument.id;
-    submission.reviewed_at = new Date().toISOString();
-
-    return NextResponse.json({
-      database: "demo",
-      request: normalizeSubmission(submission),
-      document: normalizedDocument
-    });
+    return NextResponse.json(approveDemoSubmission(submission));
   }
 
-  const [submission] = await sql`
-    select *
-    from registration_requests
-    where id = ${id}
-    limit 1
-  `;
+  let submission;
+
+  try {
+    await ensureSubmissionSchema(sql);
+    await ensureDocumentSchema(sql);
+
+    const [selectedSubmission] = await sql`
+      select *
+      from registration_requests
+      where id = ${id}
+      limit 1
+    `;
+    submission = selectedSubmission;
 
   if (!submission) {
     return NextResponse.json({ error: "Заявка не найдена." }, { status: 404 });
@@ -284,10 +340,14 @@ export async function PATCH(request) {
       returning *
     `;
 
-    await sql`
-      insert into audit_log(action, actor_name, payload)
-      values ('registration_request.returned', 'Канцелярия', ${JSON.stringify({ requestNumber: updated.request_number })}::jsonb)
-    `;
+    try {
+      await sql`
+        insert into audit_log(action, actor_name, payload)
+        values ('registration_request.returned', 'Канцелярия', ${JSON.stringify({ requestNumber: updated.request_number })}::jsonb)
+      `;
+    } catch {
+      // Audit logging should never block returning a registration request.
+    }
 
     return NextResponse.json({ database: "connected", request: normalizeSubmission(updated) });
   }
@@ -324,14 +384,30 @@ export async function PATCH(request) {
     returning *
   `;
 
-  await sql`
-    insert into audit_log(document_id, action, actor_name, payload)
-    values (${document.id}, 'registration_request.approved', 'Канцелярия', ${JSON.stringify({ requestNumber: updated.request_number, number })}::jsonb)
-  `;
+  try {
+    await sql`
+      insert into audit_log(document_id, action, actor_name, payload)
+      values (${document.id}, 'registration_request.approved', 'Канцелярия', ${JSON.stringify({ requestNumber: updated.request_number, number })}::jsonb)
+    `;
+  } catch {
+    // Audit logging should never block approving a registration request.
+  }
 
   return NextResponse.json({
     database: "connected",
     request: normalizeSubmission(updated),
     document: normalizeDocument(document)
   });
+  } catch (error) {
+    if (submission && action === "approve") {
+      return NextResponse.json(approveDemoSubmission(
+        submission,
+        `Neon не завершил регистрацию, временно создан локальный номер: ${error.message}`
+      ));
+    }
+
+    return NextResponse.json({
+      error: `Не удалось обработать заявку: ${error.message}`
+    }, { status: 500 });
+  }
 }
