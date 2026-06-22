@@ -316,7 +316,6 @@ export async function PATCH(request) {
 
   try {
     await ensureSubmissionSchema(sql);
-    await ensureDocumentSchema(sql);
 
     const [selectedSubmission] = await sql`
       select *
@@ -354,6 +353,7 @@ export async function PATCH(request) {
 
   const prefix = submission.direction === "Исходящее письмо" ? "ИСХ" : "ВХ";
   const direction = submission.direction === "Исходящее письмо" ? "Исходящая" : "Входящая";
+  await ensureDocumentSchema(sql);
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
