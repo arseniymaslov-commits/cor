@@ -31,6 +31,7 @@ import {
   IconUsers
 } from "@tabler/icons-react";
 import { documents as seedDocuments, suggestedOcr, tags } from "../lib/mock-data";
+import { defaultUsers, roleLabels } from "../lib/user-data";
 
 const navItems = [
   ["dashboard", "Рабочий стол", IconHome, ""],
@@ -563,7 +564,7 @@ function Sidebar({ activeView, setActiveView, user }) {
 
 function Topbar({ title, subtitle, user, onLogout, userName = "Алия М.", userRole = "Делопроизводитель" }) {
   const visibleName = user?.fullName || userName;
-  const visibleRole = user?.roleLabel || userRole;
+  const visibleRole = user?.roleLabel || roleLabels[user?.role] || userRole;
 
   return (
     <header className="topbar">
@@ -1218,7 +1219,43 @@ function NotificationsModule({ requests }) {
   );
 }
 
-function SettingsModule() {
+function SettingsModule({ users }) {
+  const clerks = users.filter((item) => item.role === "clerk");
+  const [departments, setDepartments] = useState([
+    { name: "Канцелярия", code: "01-01", clerk: "zarina.akmatova@redpetroleum.kg" },
+    { name: "Отдел УЧР", code: "02-01", clerk: "ainura.usengazieva@redpetroleum.kg" }
+  ]);
+  const [departmentDraft, setDepartmentDraft] = useState({
+    name: "",
+    code: "",
+    clerk: clerks[0]?.email || ""
+  });
+  const [message, setMessage] = useState("");
+
+  function updateDraft(field, value) {
+    setDepartmentDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function createDepartment() {
+    if (!departmentDraft.name.trim() || !departmentDraft.code.trim()) {
+      setMessage("Укажите название отдела и индекс номенклатуры.");
+      setTimeout(() => setMessage(""), 2600);
+      return;
+    }
+
+    setDepartments((current) => [
+      {
+        name: departmentDraft.name.trim(),
+        code: departmentDraft.code.trim(),
+        clerk: departmentDraft.clerk || clerks[0]?.email || ""
+      },
+      ...current
+    ]);
+    setDepartmentDraft({ name: "", code: "", clerk: clerks[0]?.email || "" });
+    setMessage("Отдел создан, номенклатура и делопроизводитель назначены.");
+    setTimeout(() => setMessage(""), 3000);
+  }
+
   return (
     <section className="module-page">
       <div className="module-header">
@@ -1231,8 +1268,8 @@ function SettingsModule() {
         {[
           ["Нумерация", "Автоматически присваивать ВХ/ИСХ номера по месяцу"],
           ["OCR", "Распознавать сканы в браузере без ожидания Vercel"],
-          ["Уведомления", "Показывать новые заявки канцелярии"],
-          ["Экспорт", "Выгружать реестр в Excel"]
+          ["Отделы", "Разрешить делопроизводителю создавать отделы"],
+          ["Номенклатура", "Назначать индекс отдела при создании"]
         ].map(([title, text]) => (
           <label className="setting-row" key={title}>
             <input type="checkbox" defaultChecked />
@@ -1240,15 +1277,63 @@ function SettingsModule() {
           </label>
         ))}
       </div>
+      <div className="nomenclature-panel">
+        <div className="module-header compact">
+          <div>
+            <h2>Отделы и номенклатура</h2>
+            <p>Делопроизводитель может создать отдел и закрепить за ним индекс номенклатуры.</p>
+          </div>
+        </div>
+        <div className="department-form">
+          <Field label="Название отдела" required>
+            <input
+              value={departmentDraft.name}
+              onChange={(event) => updateDraft("name", event.target.value)}
+              placeholder="Например: Отдел снабжения"
+            />
+          </Field>
+          <Field label="Индекс номенклатуры" required>
+            <input
+              value={departmentDraft.code}
+              onChange={(event) => updateDraft("code", event.target.value)}
+              placeholder="Например: 03-04"
+            />
+          </Field>
+          <Field label="Делопроизводитель отдела">
+            <select value={departmentDraft.clerk} onChange={(event) => updateDraft("clerk", event.target.value)}>
+              {clerks.map((clerk) => (
+                <option key={clerk.email} value={clerk.email}>{clerk.fullName} · {clerk.email}</option>
+              ))}
+            </select>
+          </Field>
+          <button className="primary-button" onClick={createDepartment}>Создать отдел</button>
+        </div>
+        {message ? <div className="module-message floating">{message}</div> : null}
+        <div className="department-table">
+          {departments.map((department) => {
+            const clerk = users.find((item) => item.email === department.clerk);
+            return (
+              <article key={`${department.name}-${department.code}`}>
+                <div>
+                  <strong>{department.name}</strong>
+                  <small>Номенклатура {department.code}</small>
+                </div>
+                <div>
+                  <span>Делопроизводитель</span>
+                  <strong>{clerk?.fullName || department.clerk}</strong>
+                  <small>{department.clerk}</small>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </div>
     </section>
   );
 }
 
 function UsersModule({ user }) {
-  const users = [
-    ["Арсений Маслов", "arseniy.maslov@redpetroleum.kg", "Администратор"],
-    ["Зарина Акматова", "zarina.akmatova@redpetroleum.kg", "Делопроизводитель"]
-  ];
+  const users = defaultUsers;
 
   return (
     <section className="module-page">
@@ -1257,18 +1342,19 @@ function UsersModule({ user }) {
           <h2>Пользователи и роли</h2>
           <p>Доступы для тестирования сотрудниками.</p>
         </div>
-        <span className="module-count">{user.roleLabel}</span>
+        <span className="module-count">{user.roleLabel || roleLabels[user.role] || user.role}</span>
       </div>
       <div className="user-table">
-        {users.map(([name, email, role]) => (
-          <article key={email}>
-            <span className="avatar">{name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
+        {users.map((item) => (
+          <article key={item.email}>
+            <span className="avatar">{item.fullName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
             <div>
-              <strong>{name}</strong>
-              <small>{email}</small>
+              <strong>{item.fullName}</strong>
+              <small>{item.email}</small>
             </div>
-            <StatusChip status={role === "Администратор" ? "Новое" : "Зарегистрировано"} />
-            <span>{role}</span>
+            <StatusChip status={item.role === "admin" ? "Новое" : "Зарегистрировано"} />
+            <span>{roleLabels[item.role] || item.role}</span>
+            <small>{item.department}</small>
           </article>
         ))}
       </div>
@@ -1770,7 +1856,7 @@ export default function Home() {
     if (activeView === "routes") return <RoutesModule />;
     if (activeView === "reports") return <ReportsModule documents={allDocuments} requests={registrationRequests} onExport={exportExcel} />;
     if (activeView === "notifications") return <NotificationsModule requests={registrationRequests} />;
-    if (activeView === "settings") return <SettingsModule />;
+    if (activeView === "settings") return <SettingsModule users={defaultUsers} />;
     if (activeView === "users") return <UsersModule user={user} />;
 
     return (

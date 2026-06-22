@@ -752,6 +752,15 @@ button {
   font-size: 13px;
 }
 
+.module-header.compact {
+  min-height: 72px;
+  padding: 0 18px;
+}
+
+.module-header.compact h2 {
+  font-size: 18px;
+}
+
 .module-count {
   min-height: 30px;
   display: inline-flex;
@@ -1026,7 +1035,58 @@ button {
 }
 
 .user-table article {
-  grid-template-columns: 38px minmax(0, 1fr) auto 170px;
+  grid-template-columns: 38px minmax(0, 1fr) auto 170px 140px;
+}
+
+.nomenclature-panel {
+  margin: 0 24px 24px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.department-form {
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) 170px minmax(260px, 1.2fr) auto;
+  gap: 12px;
+  align-items: end;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.department-table {
+  display: grid;
+}
+
+.department-table article {
+  min-height: 68px;
+  display: grid;
+  grid-template-columns: minmax(220px, 0.7fr) minmax(260px, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-top: 1px solid #eef1f4;
+}
+
+.department-table article:first-child {
+  border-top: 0;
+}
+
+.department-table strong,
+.department-table small,
+.department-table span {
+  display: block;
+}
+
+.department-table span,
+.department-table small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.department-table strong {
+  margin-top: 3px;
+  font-size: 14px;
 }
 
 .stack-message {
@@ -1847,6 +1907,20 @@ progress::-webkit-progress-value {
     grid-template-columns: 1fr;
   }
 
+  .module-card-grid,
+  .directory-grid,
+  .route-board,
+  .settings-grid,
+  .metrics-grid,
+  .department-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .module-layout,
+  .department-table article {
+    grid-template-columns: 1fr;
+  }
+
   .self-side {
     border-top: 1px solid var(--line);
   }
@@ -1889,6 +1963,13 @@ progress::-webkit-progress-value {
 
   .mini-dashboard,
   .work-grid,
+  .module-card-grid,
+  .directory-grid,
+  .route-board,
+  .settings-grid,
+  .metrics-grid,
+  .department-form,
+  .user-table article,
   .two-columns,
   .self-upload-grid,
   .self-steps {
