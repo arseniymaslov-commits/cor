@@ -1047,7 +1047,7 @@ button {
 
 .department-form {
   display: grid;
-  grid-template-columns: minmax(190px, 1fr) 170px minmax(260px, 1.2fr) auto;
+  grid-template-columns: minmax(180px, 1fr) 150px minmax(240px, 1fr) minmax(240px, 1fr) auto;
   gap: 12px;
   align-items: end;
   padding: 18px;
@@ -1061,7 +1061,7 @@ button {
 .department-table article {
   min-height: 68px;
   display: grid;
-  grid-template-columns: minmax(220px, 0.7fr) minmax(260px, 1fr);
+  grid-template-columns: minmax(220px, 0.7fr) minmax(260px, 1fr) minmax(260px, 1fr);
   align-items: center;
   gap: 16px;
   padding: 12px 18px;

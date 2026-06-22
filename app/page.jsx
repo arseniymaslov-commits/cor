@@ -1220,15 +1220,26 @@ function NotificationsModule({ requests }) {
 }
 
 function SettingsModule({ users }) {
-  const clerks = users.filter((item) => item.role === "clerk");
+  const employees = users;
   const [departments, setDepartments] = useState([
-    { name: "Канцелярия", code: "01-01", clerk: "zarina.akmatova@redpetroleum.kg" },
-    { name: "Отдел УЧР", code: "02-01", clerk: "ainura.usengazieva@redpetroleum.kg" }
+    {
+      name: "Канцелярия",
+      code: "01-01",
+      approver: "zarina.akmatova@redpetroleum.kg",
+      executor: "zarina.akmatova@redpetroleum.kg"
+    },
+    {
+      name: "Отдел УЧР",
+      code: "02-01",
+      approver: "ainura.usengazieva@redpetroleum.kg",
+      executor: "alima.mambetakunova@redpetroleum.kg"
+    }
   ]);
   const [departmentDraft, setDepartmentDraft] = useState({
     name: "",
     code: "",
-    clerk: clerks[0]?.email || ""
+    approver: employees[0]?.email || "",
+    executor: employees[0]?.email || ""
   });
   const [message, setMessage] = useState("");
 
@@ -1247,12 +1258,18 @@ function SettingsModule({ users }) {
       {
         name: departmentDraft.name.trim(),
         code: departmentDraft.code.trim(),
-        clerk: departmentDraft.clerk || clerks[0]?.email || ""
+        approver: departmentDraft.approver || employees[0]?.email || "",
+        executor: departmentDraft.executor || departmentDraft.approver || employees[0]?.email || ""
       },
       ...current
     ]);
-    setDepartmentDraft({ name: "", code: "", clerk: clerks[0]?.email || "" });
-    setMessage("Отдел создан, номенклатура и делопроизводитель назначены.");
+    setDepartmentDraft({
+      name: "",
+      code: "",
+      approver: employees[0]?.email || "",
+      executor: employees[0]?.email || ""
+    });
+    setMessage("Отдел создан, руководитель для согласования и исполнитель назначены.");
     setTimeout(() => setMessage(""), 3000);
   }
 
@@ -1269,7 +1286,7 @@ function SettingsModule({ users }) {
           ["Нумерация", "Автоматически присваивать ВХ/ИСХ номера по месяцу"],
           ["OCR", "Распознавать сканы в браузере без ожидания Vercel"],
           ["Отделы", "Разрешить делопроизводителю создавать отделы"],
-          ["Номенклатура", "Назначать индекс отдела при создании"]
+          ["Маршрут отдела", "Назначать руководителя для согласования и исполнителя"]
         ].map(([title, text]) => (
           <label className="setting-row" key={title}>
             <input type="checkbox" defaultChecked />
@@ -1281,7 +1298,7 @@ function SettingsModule({ users }) {
         <div className="module-header compact">
           <div>
             <h2>Отделы и номенклатура</h2>
-            <p>Делопроизводитель может создать отдел и закрепить за ним индекс номенклатуры.</p>
+            <p>При создании отдела указывается индекс, руководитель отдела как согласующее лицо и исполнитель.</p>
           </div>
         </div>
         <div className="department-form">
@@ -1299,10 +1316,17 @@ function SettingsModule({ users }) {
               placeholder="Например: 03-04"
             />
           </Field>
-          <Field label="Делопроизводитель отдела">
-            <select value={departmentDraft.clerk} onChange={(event) => updateDraft("clerk", event.target.value)}>
-              {clerks.map((clerk) => (
-                <option key={clerk.email} value={clerk.email}>{clerk.fullName} · {clerk.email}</option>
+          <Field label="Руководитель отдела / согласующее лицо">
+            <select value={departmentDraft.approver} onChange={(event) => updateDraft("approver", event.target.value)}>
+              {employees.map((employee) => (
+                <option key={employee.email} value={employee.email}>{employee.fullName} · {employee.email}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Исполнитель">
+            <select value={departmentDraft.executor} onChange={(event) => updateDraft("executor", event.target.value)}>
+              {employees.map((employee) => (
+                <option key={employee.email} value={employee.email}>{employee.fullName} · {employee.email}</option>
               ))}
             </select>
           </Field>
@@ -1311,7 +1335,8 @@ function SettingsModule({ users }) {
         {message ? <div className="module-message floating">{message}</div> : null}
         <div className="department-table">
           {departments.map((department) => {
-            const clerk = users.find((item) => item.email === department.clerk);
+            const approver = users.find((item) => item.email === department.approver);
+            const executor = users.find((item) => item.email === department.executor);
             return (
               <article key={`${department.name}-${department.code}`}>
                 <div>
@@ -1319,9 +1344,14 @@ function SettingsModule({ users }) {
                   <small>Номенклатура {department.code}</small>
                 </div>
                 <div>
-                  <span>Делопроизводитель</span>
-                  <strong>{clerk?.fullName || department.clerk}</strong>
-                  <small>{department.clerk}</small>
+                  <span>Согласующее лицо</span>
+                  <strong>{approver?.fullName || department.approver}</strong>
+                  <small>{department.approver}</small>
+                </div>
+                <div>
+                  <span>Исполнитель</span>
+                  <strong>{executor?.fullName || department.executor}</strong>
+                  <small>{department.executor}</small>
                 </div>
               </article>
             );
