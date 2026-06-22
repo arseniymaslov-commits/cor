@@ -33,22 +33,22 @@ import {
 import { documents as seedDocuments, suggestedOcr, tags } from "../lib/mock-data";
 
 const navItems = [
-  ["clerk", "Рабочий стол", IconHome, ""],
+  ["dashboard", "Рабочий стол", IconHome, ""],
   ["self-service", "Подать письмо", IconFileText, "новое"],
-  ["clerk", "Входящие", IconInbox, ""],
-  ["clerk", "Исходящие", IconSend, ""],
-  ["clerk", "Черновики", IconFileText, ""],
-  ["clerk", "На согласовании", IconClipboardList, ""],
-  ["clerk", "На подписи", IconPencil, ""],
-  ["clerk", "Просроченные", IconClock, ""],
-  ["clerk", "Архив", IconArchive, ""],
-  ["clerk", "Шаблоны", IconFileInvoice, ""],
-  ["clerk", "Справочники", IconDatabase, ""],
-  ["clerk", "Маршруты", IconShieldLock, ""],
-  ["clerk", "Отчеты и аналитика", IconLayoutDashboard, ""],
-  ["clerk", "Уведомления", IconBell, ""],
-  ["clerk", "Настройки", IconSettings, ""],
-  ["clerk", "Пользователи и роли", IconUsers, ""]
+  ["inbox", "Входящие", IconInbox, ""],
+  ["outbox", "Исходящие", IconSend, ""],
+  ["drafts", "Черновики", IconFileText, ""],
+  ["approval", "На согласовании", IconClipboardList, ""],
+  ["signature", "На подписи", IconPencil, ""],
+  ["overdue", "Просроченные", IconClock, ""],
+  ["archive", "Архив", IconArchive, ""],
+  ["templates", "Шаблоны", IconFileInvoice, ""],
+  ["directories", "Справочники", IconDatabase, ""],
+  ["routes", "Маршруты", IconShieldLock, ""],
+  ["reports", "Отчеты и аналитика", IconLayoutDashboard, ""],
+  ["notifications", "Уведомления", IconBell, ""],
+  ["settings", "Настройки", IconSettings, ""],
+  ["users", "Пользователи и роли", IconUsers, "", true]
 ];
 
 const statusMap = {
@@ -70,6 +70,25 @@ const statusMap = {
 };
 
 const routeSteps = ["Регистрация", "Рассмотрение", "Исполнение", "Согласование", "Подпись", "Архив"];
+
+const viewTitles = {
+  dashboard: ["Канцелярия / Делопроизводитель", "Рабочее место"],
+  "self-service": ["Подать письмо", "Самостоятельная регистрация для сотрудников"],
+  inbox: ["Входящие", "Зарегистрированные входящие письма"],
+  outbox: ["Исходящие", "Исходящая корреспонденция компании"],
+  drafts: ["Черновики", "Документы, сохраненные без отправки"],
+  approval: ["На согласовании", "Документы, ожидающие внутреннего согласования"],
+  signature: ["На подписи", "Документы, ожидающие подписи руководителя"],
+  overdue: ["Просроченные", "Документы с истекшим сроком исполнения"],
+  archive: ["Архив", "Завершенные и архивные документы"],
+  templates: ["Шаблоны", "Типовые формы для регистрации"],
+  directories: ["Справочники", "Контрагенты, подразделения и исполнители"],
+  routes: ["Маршруты", "Правила движения документов"],
+  reports: ["Отчеты и аналитика", "Контроль нагрузки и сроков"],
+  notifications: ["Уведомления", "Системные события и напоминания"],
+  settings: ["Настройки", "Параметры рабочего места"],
+  users: ["Пользователи и роли", "Доступы сотрудников"]
+};
 
 const blankDocument = {
   id: "new",
@@ -520,10 +539,12 @@ function Sidebar({ activeView, setActiveView, user }) {
         <Image src="/logo.png" alt="Red Petroleum" width={160} height={55} priority />
       </div>
       <nav className="nav-list" aria-label="Основная навигация">
-        {navItems.filter(([, label]) => canAdmin || label !== "Пользователи и роли").map(([view, label, Icon, count]) => (
+        {navItems.filter(([, , , , adminOnly]) => canAdmin || !adminOnly).map(([view, label, Icon, count]) => (
           <button
             key={label}
-            className={clsx("nav-item", activeView === view && label === (view === "clerk" ? "Рабочий стол" : "Подать письмо") && "active")}
+            aria-label={label}
+            data-view={view}
+            className={clsx("nav-item", activeView === view && "active")}
             onClick={() => setActiveView(view)}
           >
             <Icon size={18} stroke={1.85} />
@@ -948,6 +969,313 @@ function ReviewQueue({ requests, isReviewing, onReview }) {
   );
 }
 
+function filterDocumentsForView(documents, view) {
+  return documents.filter((doc) => {
+    if (view === "inbox") return doc.type === "Входящая";
+    if (view === "outbox") return doc.type === "Исходящая";
+    if (view === "drafts") return doc.status === "Черновик";
+    if (view === "approval") return doc.status === "На согласовании";
+    if (view === "signature") return doc.status === "На подписи";
+    if (view === "overdue") return doc.overdue || doc.status === "Просрочено";
+    if (view === "archive") return doc.status === "В архиве" || doc.status === "Исполнено" || doc.status === "Отправлено";
+    return true;
+  });
+}
+
+function DocumentsModule({ view, documents, selectedId, setSelectedId, setActiveView }) {
+  const [actionMessage, setActionMessage] = useState("");
+  const visibleDocuments = filterDocumentsForView(documents, view);
+  const selected = visibleDocuments.find((doc) => doc.id === selectedId) || visibleDocuments[0];
+  const [title, subtitle] = viewTitles[view] || viewTitles.dashboard;
+
+  function showAction(message) {
+    setActionMessage(message);
+    setTimeout(() => setActionMessage(""), 2600);
+  }
+
+  return (
+    <section className="module-page">
+      <div className="module-header">
+        <div>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+        <span className="module-count">{visibleDocuments.length} документов</span>
+      </div>
+      <div className="module-layout">
+        <div className="module-list">
+          {visibleDocuments.map((doc) => (
+            <button
+              key={doc.id}
+              className={clsx("module-row", selected?.id === doc.id && "active")}
+              onClick={() => setSelectedId(doc.id)}
+            >
+              <span>
+                <strong>{doc.number}</strong>
+                <small>{doc.date}</small>
+              </span>
+              <span>
+                <strong>{doc.subject}</strong>
+                <small>{doc.sender || doc.recipient}</small>
+              </span>
+              <StatusChip status={doc.status} />
+            </button>
+          ))}
+          {visibleDocuments.length === 0 ? (
+            <div className="empty-state">
+              <strong>В этом разделе пока пусто</strong>
+              <span>Когда появятся подходящие документы, они отобразятся здесь.</span>
+            </div>
+          ) : null}
+        </div>
+        <aside className="module-detail">
+          {selected ? (
+            <>
+              <div className="detail-head">
+                <span>{selected.number}</span>
+                <StatusChip status={selected.status} />
+              </div>
+              <h3>{selected.subject}</h3>
+              <dl>
+                <div><dt>Тип</dt><dd>{selected.type}</dd></div>
+                <div><dt>Дата</dt><dd>{selected.date}</dd></div>
+                <div><dt>Отправитель</dt><dd>{selected.sender || "Не указан"}</dd></div>
+                <div><dt>Получатель</dt><dd>{selected.recipient || "Не указан"}</dd></div>
+                <div><dt>Исполнитель</dt><dd>{selected.executor || "Не назначен"}</dd></div>
+                <div><dt>Срок</dt><dd>{selected.deadline || "Без срока"}</dd></div>
+              </dl>
+              <div className="module-actions">
+                <button className="secondary-button" onClick={() => setActiveView("dashboard")}>Открыть карточку</button>
+                <button className="primary-button" onClick={() => showAction("Маршрут подготовлен. В тестовом режиме действие зафиксировано без отправки.")}>Передать дальше</button>
+              </div>
+              {actionMessage ? <div className="module-message">{actionMessage}</div> : null}
+            </>
+          ) : (
+            <div className="empty-state compact">
+              <strong>Документ не выбран</strong>
+              <span>Выберите документ в списке слева.</span>
+            </div>
+          )}
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function TemplatesModule() {
+  const [message, setMessage] = useState("");
+  const templates = [
+    ["Входящее письмо", "Регистрация внешнего письма, заявления или уведомления"],
+    ["Исходящее письмо", "Подготовка исходящего номера и отправка адресату"],
+    ["Служебная записка", "Внутреннее обращение между подразделениями"],
+    ["Акт приема-передачи", "Фиксация передачи документов или материалов"]
+  ];
+
+  return (
+    <section className="module-page">
+      <div className="module-header">
+        <div>
+          <h2>Шаблоны</h2>
+          <p>Типовые формы для быстрого создания документов.</p>
+        </div>
+      </div>
+      <div className="module-card-grid">
+        {templates.map(([name, description]) => (
+          <article className="module-card" key={name}>
+            <IconFileInvoice size={24} />
+            <h3>{name}</h3>
+            <p>{description}</p>
+            <button className="secondary-button" onClick={() => {
+              setMessage(`Шаблон «${name}» выбран. Для теста можно создать документ на рабочем столе.`);
+              setTimeout(() => setMessage(""), 2800);
+            }}>Создать</button>
+          </article>
+        ))}
+      </div>
+      {message ? <div className="module-message floating">{message}</div> : null}
+    </section>
+  );
+}
+
+function DirectoriesModule() {
+  const groups = [
+    ["Контрагенты", ["Министерство финансов КР", "ГНС при МФ КР", "Konica Scanner", "Red Petroleum Holding"]],
+    ["Подразделения", ["Канцелярия", "Финансовый отдел", "Юридический отдел", "Операционный отдел"]],
+    ["Исполнители", ["Арсений Маслов", "Зарина Акматова", "Данияр К.", "Касымов Р. А."]]
+  ];
+
+  return (
+    <section className="module-page">
+      <div className="module-header">
+        <div>
+          <h2>Справочники</h2>
+          <p>Базовые списки для заполнения карточек документов.</p>
+        </div>
+      </div>
+      <div className="directory-grid">
+        {groups.map(([title, items]) => (
+          <article className="directory-card" key={title}>
+            <h3>{title}</h3>
+            {items.map((item) => <div key={item}>{item}</div>)}
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RoutesModule() {
+  const routes = [
+    ["Входящее письмо", "Канцелярия", "Заместитель генерального директора", "Исполнитель", "Архив"],
+    ["Исходящее письмо", "Автор", "Согласование", "Подпись", "Отправка"],
+    ["Служебная записка", "Автор", "Руководитель отдела", "Исполнитель", "Закрытие"]
+  ];
+
+  return (
+    <section className="module-page">
+      <div className="module-header">
+        <div>
+          <h2>Маршруты</h2>
+          <p>Правила движения документов по подразделениям.</p>
+        </div>
+      </div>
+      <div className="route-board">
+        {routes.map(([name, ...steps]) => (
+          <article className="route-card" key={name}>
+            <h3>{name}</h3>
+            <div>
+              {steps.map((step, index) => (
+                <span key={step}>{index + 1}. {step}</span>
+              ))}
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReportsModule({ documents, requests, onExport }) {
+  const pending = requests.filter((request) => request.status === "На проверке канцелярии").length;
+  const overdue = documents.filter((doc) => doc.overdue || doc.status === "Просрочено").length;
+  const outgoing = documents.filter((doc) => doc.type === "Исходящая").length;
+
+  return (
+    <section className="module-page">
+      <div className="module-header">
+        <div>
+          <h2>Отчеты и аналитика</h2>
+          <p>Быстрый срез по документообороту.</p>
+        </div>
+        <button className="ghost-button" onClick={onExport}><IconFileExport size={17} /> Excel</button>
+      </div>
+      <div className="metrics-grid">
+        <article><span>Всего документов</span><strong>{documents.length}</strong></article>
+        <article><span>На проверке</span><strong>{pending}</strong></article>
+        <article><span>Исходящие</span><strong>{outgoing}</strong></article>
+        <article><span>Просроченные</span><strong>{overdue}</strong></article>
+      </div>
+      <div className="module-card">
+        <h3>Нагрузка по этапам</h3>
+        {routeSteps.map((step, index) => (
+          <div className="report-line" key={step}>
+            <span>{step}</span>
+            <progress value={Math.max(12, documents.length * 8 - index * 7)} max="100" />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function NotificationsModule({ requests }) {
+  const items = [
+    ...requests.slice(0, 5).map((request) => [`${request.request_number}`, request.status, request.subject]),
+    ["Система", "OCR готов", "Можно тестировать распознавание на новых сканах"],
+    ["Система", "Доступы", "Администратор может открыть раздел пользователей"]
+  ];
+
+  return (
+    <section className="module-page">
+      <div className="module-header">
+        <div>
+          <h2>Уведомления</h2>
+          <p>Последние события по заявкам и документам.</p>
+        </div>
+      </div>
+      <div className="notification-list">
+        {items.map(([source, status, text]) => (
+          <article key={`${source}-${text}`}>
+            <IconBell size={18} />
+            <div>
+              <span>{source} · {status}</span>
+              <strong>{text}</strong>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function SettingsModule() {
+  return (
+    <section className="module-page">
+      <div className="module-header">
+        <div>
+          <h2>Настройки</h2>
+          <p>Параметры регистрации и рабочего места.</p>
+        </div>
+      </div>
+      <div className="settings-grid">
+        {[
+          ["Нумерация", "Автоматически присваивать ВХ/ИСХ номера по месяцу"],
+          ["OCR", "Распознавать сканы в браузере без ожидания Vercel"],
+          ["Уведомления", "Показывать новые заявки канцелярии"],
+          ["Экспорт", "Выгружать реестр в Excel"]
+        ].map(([title, text]) => (
+          <label className="setting-row" key={title}>
+            <input type="checkbox" defaultChecked />
+            <span><strong>{title}</strong><small>{text}</small></span>
+          </label>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function UsersModule({ user }) {
+  const users = [
+    ["Арсений Маслов", "arseniy.maslov@redpetroleum.kg", "Администратор"],
+    ["Зарина Акматова", "zarina.akmatova@redpetroleum.kg", "Делопроизводитель"]
+  ];
+
+  return (
+    <section className="module-page">
+      <div className="module-header">
+        <div>
+          <h2>Пользователи и роли</h2>
+          <p>Доступы для тестирования сотрудниками.</p>
+        </div>
+        <span className="module-count">{user.roleLabel}</span>
+      </div>
+      <div className="user-table">
+        {users.map(([name, email, role]) => (
+          <article key={email}>
+            <span className="avatar">{name.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span>
+            <div>
+              <strong>{name}</strong>
+              <small>{email}</small>
+            </div>
+            <StatusChip status={role === "Администратор" ? "Новое" : "Зарегистрировано"} />
+            <span>{role}</span>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function SelfServicePortal({ onRequestCreated }) {
   const [direction, setDirection] = useState("Входящее письмо");
   const [step, setStep] = useState(1);
@@ -1239,7 +1567,7 @@ export default function Home() {
   const [user, setUser] = useState(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [allDocuments, setAllDocuments] = useState(seedDocuments);
-  const [activeView, setActiveView] = useState("clerk");
+  const [activeView, setActiveView] = useState("dashboard");
   const [selectedId, setSelectedId] = useState(seedDocuments[0]?.id || "new");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("Все");
@@ -1311,7 +1639,7 @@ export default function Home() {
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     setUser(null);
-    setActiveView("clerk");
+    setActiveView("dashboard");
   }
 
   async function runOcr(files = []) {
@@ -1420,6 +1748,65 @@ export default function Home() {
     window.location.href = "/api/export";
   }
 
+  function renderActiveView() {
+    if (activeView === "self-service") {
+      return <SelfServicePortal onRequestCreated={handleRequestCreated} />;
+    }
+
+    if (["inbox", "outbox", "drafts", "approval", "signature", "overdue", "archive"].includes(activeView)) {
+      return (
+        <DocumentsModule
+          view={activeView}
+          documents={allDocuments}
+          selectedId={selectedId}
+          setSelectedId={setSelectedId}
+          setActiveView={setActiveView}
+        />
+      );
+    }
+
+    if (activeView === "templates") return <TemplatesModule />;
+    if (activeView === "directories") return <DirectoriesModule />;
+    if (activeView === "routes") return <RoutesModule />;
+    if (activeView === "reports") return <ReportsModule documents={allDocuments} requests={registrationRequests} onExport={exportExcel} />;
+    if (activeView === "notifications") return <NotificationsModule requests={registrationRequests} />;
+    if (activeView === "settings") return <SettingsModule />;
+    if (activeView === "users") return <UsersModule user={user} />;
+
+    return (
+      <div className="work-grid">
+        <Registry
+          documents={filteredDocuments}
+          selectedId={selectedId}
+          setSelectedId={setSelectedId}
+          search={search}
+          setSearch={setSearch}
+          filter={filter}
+          setFilter={setFilter}
+        />
+        <div className="center-stack">
+          <ReviewQueue
+            requests={registrationRequests}
+            isReviewing={isReviewing}
+            onReview={reviewRequest}
+          />
+          {reviewMessage ? <div className="stack-message">{reviewMessage}</div> : null}
+          <DocumentForm
+            key={selected.id}
+            selected={selected}
+            draft={documentDraft}
+            onDraftChange={setDocumentDraft}
+            savedMessage={savedMessage}
+            onSaveDraft={() => saveDocument("Черновик")}
+            onSave={() => saveDocument("Новое")}
+            onSendManager={() => saveDocument("На рассмотрении")}
+          />
+        </div>
+        <OcrPanel ocr={ocr} onRunOcr={runOcr} isProcessing={isProcessing} onExport={exportExcel} />
+      </div>
+    );
+  }
+
   if (isAuthLoading) {
     return <main className="loading-screen">Проверяем сессию...</main>;
   }
@@ -1432,51 +1819,13 @@ export default function Home() {
     <main className="app-shell">
       <Sidebar activeView={activeView} setActiveView={setActiveView} user={user} />
       <div className="workspace">
-        {activeView === "self-service" ? (
-          <>
-            <Topbar
-              title="Подать письмо"
-              subtitle="Самостоятельная регистрация для сотрудников"
-              user={user}
-              onLogout={logout}
-            />
-            <SelfServicePortal onRequestCreated={handleRequestCreated} />
-          </>
-        ) : (
-          <>
-            <Topbar title="Канцелярия / Делопроизводитель" subtitle="Рабочее место" user={user} onLogout={logout} />
-            <div className="work-grid">
-              <Registry
-                documents={filteredDocuments}
-                selectedId={selectedId}
-                setSelectedId={setSelectedId}
-                search={search}
-                setSearch={setSearch}
-                filter={filter}
-                setFilter={setFilter}
-              />
-              <div className="center-stack">
-                <ReviewQueue
-                  requests={registrationRequests}
-                  isReviewing={isReviewing}
-                  onReview={reviewRequest}
-                />
-                {reviewMessage ? <div className="stack-message">{reviewMessage}</div> : null}
-                <DocumentForm
-                  key={selected.id}
-                  selected={selected}
-                  draft={documentDraft}
-                  onDraftChange={setDocumentDraft}
-                  savedMessage={savedMessage}
-                  onSaveDraft={() => saveDocument("Черновик")}
-                  onSave={() => saveDocument("Новое")}
-                  onSendManager={() => saveDocument("На рассмотрении")}
-                />
-              </div>
-              <OcrPanel ocr={ocr} onRunOcr={runOcr} isProcessing={isProcessing} onExport={exportExcel} />
-            </div>
-          </>
-        )}
+        <Topbar
+          title={(viewTitles[activeView] || viewTitles.dashboard)[0]}
+          subtitle={(viewTitles[activeView] || viewTitles.dashboard)[1]}
+          user={user}
+          onLogout={logout}
+        />
+        {renderActiveView()}
       </div>
     </main>
   );
